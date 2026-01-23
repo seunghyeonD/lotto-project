@@ -1,0 +1,21 @@
+{
+  "name": "lotto-project",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Lotto number generator and management system",
+  "scripts": {
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:backend": "cd backend && npm run start:dev",
+    "build:frontend": "cd frontend && npm run build",
+    "build:backend": "cd backend && npm run build",
+    "install:all": "cd frontend && npm install && cd ../backend && npm install"
+  },
+  "keywords": [
+    "lotto",
+    "nextjs",
+    "nestjs",
+    "monorepo"
+  ],
+  "author": "",
+  "license": "MIT"
+}
