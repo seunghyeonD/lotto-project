@@ -21,8 +21,8 @@ export default function ValidatePage() {
   const [error, setError] = useState<string | null>(null);
 
   const handleValidate = async () => {
-    if (selectedNumbers.length !== 6) {
-      setError('6개의 번호를 선택해주세요.');
+    if (selectedNumbers.length === 0 || selectedNumbers.length > 15) {
+      setError('1개에서 15개 사이의 번호를 선택해주세요.');
       return;
     }
 
@@ -78,6 +78,7 @@ export default function ValidatePage() {
             <NumberPicker
               selectedNumbers={selectedNumbers}
               onChange={setSelectedNumbers}
+              maxSelection={15}
             />
           </div>
 
@@ -124,7 +125,7 @@ export default function ValidatePage() {
 
             <button
               onClick={handleValidate}
-              disabled={loading || selectedNumbers.length !== 6}
+              disabled={loading || selectedNumbers.length === 0 || selectedNumbers.length > 15}
               className="w-full px-6 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors font-bold disabled:bg-gray-400 disabled:cursor-not-allowed"
             >
               {loading ? '검증 중...' : '검증 시작'}
@@ -140,7 +141,7 @@ export default function ValidatePage() {
 
         {/* 결과 표시 */}
         <div className="space-y-6">
-          {selectedNumbers.length === 6 && (
+          {selectedNumbers.length > 0 && (
             <div className="bg-white rounded-lg shadow-md p-6">
               <h2 className="text-xl font-bold mb-4 text-gray-800">
                 선택된 번호

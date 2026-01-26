@@ -23,7 +23,7 @@ export const LottoNumberSet: React.FC<LottoNumberSetProps> = ({
 
   return (
     <div className="flex items-center gap-2 flex-wrap">
-      <div className="flex gap-2">
+      <div className="flex gap-2 flex-wrap">
         {sortedNumbers.map((num, index) => (
           <LottoNumber key={index} number={num} size={size} />
         ))}

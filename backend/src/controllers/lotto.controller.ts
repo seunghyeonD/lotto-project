@@ -180,9 +180,9 @@ export class LottoController {
    */
   @Post('combinations/validate')
   validateCombination(@Body() dto: ValidateCombinationDto) {
-    if (!dto.numbers || dto.numbers.length !== 6) {
+    if (!dto.numbers || dto.numbers.length === 0 || dto.numbers.length > 15) {
       throw new HttpException(
-        'Invalid numbers: must provide 6 numbers',
+        'Invalid numbers: must provide between 1 and 15 numbers',
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -199,9 +199,9 @@ export class LottoController {
    */
   @Post('combinations/analyze')
   analyzeCombination(@Body() dto: AnalyzeCombinationDto) {
-    if (!dto.numbers || dto.numbers.length !== 6) {
+    if (!dto.numbers || dto.numbers.length === 0 || dto.numbers.length > 15) {
       throw new HttpException(
-        'Invalid numbers: must provide 6 numbers',
+        'Invalid numbers: must provide between 1 and 15 numbers',
         HttpStatus.BAD_REQUEST,
       );
     }

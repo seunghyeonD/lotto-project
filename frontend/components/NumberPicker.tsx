@@ -2,11 +2,11 @@
  * 번호 선택 컴포넌트
  */
 
-'use client';
+"use client";
 
-import React, { useState } from 'react';
-import { LottoNumber } from './LottoNumber';
-import { LottoNumber as LottoNumberType } from '@/types/lotto';
+import React, { useState } from "react";
+import { LottoNumber } from "./LottoNumber";
+import { LottoNumber as LottoNumberType } from "@/types/lotto";
 
 interface NumberPickerProps {
   selectedNumbers: LottoNumberType[];
@@ -17,7 +17,7 @@ interface NumberPickerProps {
 export const NumberPicker: React.FC<NumberPickerProps> = ({
   selectedNumbers,
   onChange,
-  maxSelection = 6,
+  maxSelection = 15,
 }) => {
   const allNumbers = Array.from({ length: 45 }, (_, i) => i + 1);
 
@@ -41,11 +41,11 @@ export const NumberPicker: React.FC<NumberPickerProps> = ({
   };
 
   const ranges = [
-    { label: '단번대 (1-10)', numbers: allNumbers.slice(0, 10) },
-    { label: '십번대 (11-20)', numbers: allNumbers.slice(10, 20) },
-    { label: '이십번대 (21-30)', numbers: allNumbers.slice(20, 30) },
-    { label: '삼십번대 (31-40)', numbers: allNumbers.slice(30, 40) },
-    { label: '사십번대 (41-45)', numbers: allNumbers.slice(40, 45) },
+    { label: "단번대 (1-10)", numbers: allNumbers.slice(0, 10) },
+    { label: "십번대 (11-20)", numbers: allNumbers.slice(10, 20) },
+    { label: "이십번대 (21-30)", numbers: allNumbers.slice(20, 30) },
+    { label: "삼십번대 (31-40)", numbers: allNumbers.slice(30, 40) },
+    { label: "사십번대 (41-45)", numbers: allNumbers.slice(40, 45) },
   ];
 
   return (
