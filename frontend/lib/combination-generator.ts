@@ -361,6 +361,90 @@ export function groupBySharedNumbers(
 }
 
 /**
+ * 정확히 exactCount개의 같은 번호를 공유하는 조합끼리 그룹핑
+ * 각 조합에서 가능한 모든 exactCount개 부분집합을 키로 사용하여 그룹핑
+ */
+export function groupByExactSharedCount(
+  combos: LottoNumber[][],
+  exactCount: number,
+): CombinationGroup[] {
+  // 각 조합에서 exactCount개짜리 부분집합을 모두 구해서 맵에 저장
+  const subsetMap = new Map<string, Set<number>>();
+
+  for (let i = 0; i < combos.length; i++) {
+    const subs = subsets(combos[i], exactCount);
+    for (const sub of subs) {
+      const key = sub.join(',');
+      if (!subsetMap.has(key)) {
+        subsetMap.set(key, new Set());
+      }
+      subsetMap.get(key)!.add(i);
+    }
+  }
+
+  // 2개 이상의 조합이 포함된 부분집합만 그룹으로 변환
+  // 단, 그룹 내 조합들이 정확히 exactCount개만 공유하는지 확인 (더 많이 공유하는 쌍은 제외)
+  const groups: CombinationGroup[] = [];
+  const seen = new Set<string>();
+
+  // 그룹 크기 내림차순으로 정렬
+  const entries = Array.from(subsetMap.entries())
+    .filter(([, indices]) => indices.size > 1)
+    .sort((a, b) => b[1].size - a[1].size);
+
+  for (const [key, indices] of entries) {
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    const sharedNumbers = key.split(',').map(Number) as LottoNumber[];
+    // 그룹 내 조합들 중 정확히 exactCount개만 공유하는 조합만 필터
+    const comboIndices = Array.from(indices);
+    const validCombos: LottoNumber[][] = [];
+
+    for (const idx of comboIndices) {
+      const combo = combos[idx];
+      // 공유 번호가 정확히 exactCount개인지 확인 (sharedNumbers 외 다른 번호는 다름)
+      const sharedSet = new Set(sharedNumbers);
+      const overlap = combo.filter((n) => sharedSet.has(n)).length;
+      if (overlap === exactCount) {
+        validCombos.push(combo);
+      }
+    }
+
+    if (validCombos.length >= 2) {
+      groups.push({
+        sharedNumbers: sharedNumbers.sort((a, b) => a - b),
+        combinations: validCombos.map((nums, idx) => ({
+          id: `g3-${key}-${idx}`,
+          numbers: nums,
+          rangeDistribution: getRangeDistribution(nums),
+        })),
+        sharedCount: exactCount,
+      });
+    }
+  }
+
+  return groups;
+}
+
+/**
+ * 배열에서 k개를 선택하는 모든 부분집합 (정렬된 상태)
+ */
+function subsets(arr: LottoNumber[], k: number): LottoNumber[][] {
+  if (k === 0) return [[]];
+  if (arr.length < k) return [];
+  const result: LottoNumber[][] = [];
+  const sorted = [...arr].sort((a, b) => a - b);
+  for (let i = 0; i <= sorted.length - k; i++) {
+    const rest = subsets(sorted.slice(i + 1), k - 1);
+    for (const sub of rest) {
+      result.push([sorted[i], ...sub]);
+    }
+  }
+  return result;
+}
+
+/**
  * 번호 배열의 범대 분포 반환
  */
 function getRangeDistribution(numbers: LottoNumber[]) {

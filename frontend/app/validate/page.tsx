@@ -20,6 +20,7 @@ import {
   splitAndCombine,
   filterByHistoricalMatch,
   groupBySharedNumbers,
+  groupByExactSharedCount,
   getNumberRange,
 } from "@/lib/combination-generator";
 
@@ -99,6 +100,7 @@ export default function ValidatePage() {
   // 그룹핑 결과
   const [groups5, setGroups5] = useState<CombinationGroup[]>([]);
   const [groups4, setGroups4] = useState<CombinationGroup[]>([]);
+  const [groups3, setGroups3] = useState<CombinationGroup[]>([]);
 
   // Step 1: 데이터 로딩
   const handleLoadData = useCallback(async () => {
@@ -191,6 +193,23 @@ export default function ValidatePage() {
     }, 50);
   }, [filteredCombos]);
 
+  // Step 7: 3개 공유 그룹핑
+  const handleGroup3Combinations = useCallback(() => {
+    setLoading(true);
+    setTimeout(() => {
+      try {
+        const g3 = groupByExactSharedCount(filteredCombos, 3);
+        setGroups3(g3);
+        setCurrentStep(6);
+      } catch (err) {
+        setError("3개 공유 그룹핑 중 오류가 발생했습니다.");
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    }, 50);
+  }, [filteredCombos]);
+
   const steps = [
     { label: "데이터 로딩", description: "최근 100주 당첨 데이터" },
     { label: "빈도순 정리표", description: "100주간 번호 출현 빈도" },
@@ -198,6 +217,7 @@ export default function ValidatePage() {
     { label: "조합 생성", description: "후보 번호에서 조합 생성" },
     { label: "과거 비교", description: "과거 데이터와 비교 필터링" },
     { label: "그룹핑 결과", description: "최종 추천 조합" },
+    { label: "3개 공유 조합", description: "3개만 같은 다양한 조합" },
   ];
 
   return (
@@ -815,10 +835,91 @@ export default function ValidatePage() {
             )}
           </div>
 
+          {currentStep === 5 && (
+            <button
+              onClick={handleGroup3Combinations}
+              disabled={loading || filteredCombos.length === 0}
+              className="mt-4 px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-bold disabled:bg-gray-400"
+            >
+              {loading ? "그룹핑 중..." : "다음: 3개 공유 조합 분석"}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Step 7: 3개 공유 그룹핑 결과 */}
+      {currentStep >= 6 && (
+        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+          <h2 className="text-xl font-bold text-gray-800 mb-4">
+            Step 7: 3개 공유 조합 (다양한 조합)
+          </h2>
+          <p className="text-sm text-gray-500 mb-4">
+            3개 번호만 공유하고 나머지 3개가 다른 조합 그룹입니다. 더 넓은 번호 범위를 커버합니다.
+          </p>
+
+          <div className="mb-4">
+            <span className="bg-teal-100 text-teal-800 px-2 py-0.5 rounded text-sm font-bold">
+              3개 번호 공유 그룹
+            </span>
+            <span className="text-sm text-gray-500 ml-2">
+              {groups3.length}개 그룹
+            </span>
+          </div>
+
+          {groups3.length > 0 ? (
+            <div className="space-y-4 max-h-[600px] overflow-y-auto">
+              {groups3.slice(0, 50).map((group, gIdx) => (
+                <div key={gIdx} className="bg-teal-50 rounded-lg p-4">
+                  <div className="mb-2">
+                    <span className="text-xs text-teal-600 font-medium">
+                      공유 번호:
+                    </span>
+                    <div className="flex gap-1.5 mt-1">
+                      {group.sharedNumbers.map((num) => (
+                        <LottoBall key={num} num={num} size="md" />
+                      ))}
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    {group.combinations.map((combo, cIdx) => (
+                      <div
+                        key={cIdx}
+                        className="flex items-center gap-2 bg-white p-2 rounded"
+                      >
+                        <div className="flex gap-1.5">
+                          {combo.numbers.map((num) => {
+                            const isShared = group.sharedNumbers.includes(num);
+                            return (
+                              <span key={num} className={isShared ? "opacity-100" : "opacity-60"}>
+                                <LottoBall num={num} />
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <span className="text-xs text-teal-500">
+                    {group.combinations.length}개 조합
+                  </span>
+                </div>
+              ))}
+              {groups3.length > 50 && (
+                <p className="text-xs text-gray-400 text-center py-2">
+                  ... 외 {groups3.length - 50}개 그룹
+                </p>
+              )}
+            </div>
+          ) : (
+            <p className="text-gray-400 text-sm">
+              3개 번호만 공유하는 그룹이 없습니다.
+            </p>
+          )}
+
           {/* 최종 요약 */}
           <div className="mt-6 bg-gradient-to-r from-blue-50 to-green-50 rounded-lg p-4">
             <h3 className="font-bold text-gray-800 mb-2">최종 요약</h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
               <div>
                 <span className="text-gray-500">분석 데이터</span>
                 <div className="font-bold text-gray-500">
@@ -841,6 +942,12 @@ export default function ValidatePage() {
                 <span className="text-gray-500">그룹 (5개/4개)</span>
                 <div className="font-bold text-gray-500">
                   {groups5.length} / {groups4.length}
+                </div>
+              </div>
+              <div>
+                <span className="text-gray-500">3개 공유 그룹</span>
+                <div className="font-bold text-gray-500">
+                  {groups3.length}개
                 </div>
               </div>
             </div>
@@ -866,6 +973,7 @@ export default function ValidatePage() {
               setFilterStats({ before: 0, after: 0, excluded: 0 });
               setGroups5([]);
               setGroups4([]);
+              setGroups3([]);
               setError(null);
             }}
             className="px-6 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
