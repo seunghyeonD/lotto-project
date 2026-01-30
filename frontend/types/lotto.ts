@@ -79,3 +79,31 @@ export interface AnalyzeCombinationRequest {
   numbers: LottoNumber[];
   compareRounds: number[];
 }
+
+export interface FrequencyEntry {
+  number: LottoNumber;
+  count: number;
+}
+
+export interface FrequencyRow {
+  rank: number;
+  단: FrequencyEntry | null;
+  십: FrequencyEntry | null;
+  이: FrequencyEntry | null;
+  삼: FrequencyEntry | null;
+  사: FrequencyEntry | null;
+  count45: number;
+}
+
+export interface CombinationGroup {
+  sharedNumbers: LottoNumber[];
+  combinations: LottoCombination[];
+  sharedCount: number;
+}
+
+export interface GenerationProgress {
+  step: number;
+  totalSteps: number;
+  description: string;
+  data?: any;
+}

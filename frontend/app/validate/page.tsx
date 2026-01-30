@@ -1,241 +1,738 @@
 /**
  * 조합 검증 페이지
+ * 기획안 기반 6단계 흐름: 데이터 로딩 → 빈도표 → 필터링 → 조합 생성 → 과거 비교 → 그룹핑
  */
 
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { lottoApi } from '@/lib/api';
 import {
-  CombinationValidationResult,
   LottoNumber as LottoNumberType,
+  LottoDrawResult,
+  FrequencyRow,
+  FrequencyEntry,
+  CombinationGroup,
 } from '@/types/lotto';
-import { NumberPicker } from '@/components/NumberPicker';
-import { LottoNumberSet } from '@/components/LottoNumberSet';
+import {
+  getFrequencyTable,
+  filterCandidateNumbers,
+  splitAndCombine,
+  filterByHistoricalMatch,
+  groupBySharedNumbers,
+  getNumberRange,
+} from '@/lib/combination-generator';
+
+type RangeKey = '단' | '십' | '이' | '삼' | '사';
+const RANGE_KEYS: RangeKey[] = ['단', '십', '이', '삼', '사'];
+
+const RANGE_COLORS: Record<RangeKey, string> = {
+  '단': 'bg-yellow-500',
+  '십': 'bg-blue-500',
+  '이': 'bg-red-500',
+  '삼': 'bg-gray-700',
+  '사': 'bg-green-500',
+};
+
+function LottoBall({ num, size = 'sm' }: { num: LottoNumberType; size?: 'sm' | 'md' }) {
+  const range = getNumberRange(num);
+  const color = RANGE_COLORS[range];
+  const sizeClass = size === 'md' ? 'w-10 h-10 text-base' : 'w-7 h-7 text-xs';
+  return (
+    <span className={`${color} ${sizeClass} rounded-full inline-flex items-center justify-center text-white font-bold`}>
+      {num}
+    </span>
+  );
+}
 
 export default function ValidatePage() {
-  const [selectedNumbers, setSelectedNumbers] = useState<LottoNumberType[]>([]);
-  const [roundRange, setRoundRange] = useState({ start: 1, end: 100 });
-  const [results, setResults] = useState<CombinationValidationResult[]>([]);
+  // 상태
+  const [currentStep, setCurrentStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [drawCount, setDrawCount] = useState(100);
+  const [loadMode, setLoadMode] = useState<'recent' | 'range'>('recent');
+  const [rangeStart, setRangeStart] = useState(1109);
+  const [rangeEnd, setRangeEnd] = useState(1208);
 
-  const handleValidate = async () => {
-    if (selectedNumbers.length === 0 || selectedNumbers.length > 15) {
-      setError('1개에서 15개 사이의 번호를 선택해주세요.');
-      return;
-    }
+  // 데이터
+  const [draws, setDraws] = useState<LottoDrawResult[]>([]);
+  const [frequencyTable, setFrequencyTable] = useState<FrequencyRow[]>([]);
+  const [byRange, setByRange] = useState<Record<RangeKey, FrequencyEntry[]> | null>(null);
+  const [count45, setCount45] = useState(0);
 
+  // 필터링 결과
+  const [candidates, setCandidates] = useState<Record<RangeKey, LottoNumberType[]> | null>(null);
+  const [allCandidates, setAllCandidates] = useState<LottoNumberType[]>([]);
+  const [recentNumbers, setRecentNumbers] = useState<Set<LottoNumberType>>(new Set());
+  const [excludedNumbers, setExcludedNumbers] = useState<Set<LottoNumberType>>(new Set());
+
+  // 조합 결과
+  const [generatedCombos, setGeneratedCombos] = useState<LottoNumberType[][]>([]);
+  const [filteredCombos, setFilteredCombos] = useState<LottoNumberType[][]>([]);
+  const [filterStats, setFilterStats] = useState({ before: 0, after: 0, excluded: 0 });
+
+  // 그룹핑 결과
+  const [groups5, setGroups5] = useState<CombinationGroup[]>([]);
+  const [groups4, setGroups4] = useState<CombinationGroup[]>([]);
+
+  // Step 1: 데이터 로딩
+  const handleLoadData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-
-      const validationResults = await lottoApi.validateCombination({
-        numbers: selectedNumbers,
-        startRound: roundRange.start,
-        endRound: roundRange.end,
-      });
-
-      setResults(validationResults);
+      let recentDraws: LottoDrawResult[];
+      if (loadMode === 'recent') {
+        recentDraws = await lottoApi.getRecentDraws(drawCount);
+      } else {
+        recentDraws = await lottoApi.getDrawsInRange(rangeStart, rangeEnd);
+      }
+      setDraws(recentDraws);
+      setCurrentStep(1);
     } catch (err) {
-      setError('검증에 실패했습니다.');
+      setError('데이터 로딩에 실패했습니다. API 서버를 확인해주세요.');
       console.error(err);
     } finally {
       setLoading(false);
     }
-  };
+  }, [drawCount, loadMode, rangeStart, rangeEnd]);
 
-  const getMatchStats = () => {
-    const matchCounts = results.reduce(
-      (acc, result) => {
-        acc[result.matchCount] = (acc[result.matchCount] || 0) + 1;
-        return acc;
-      },
-      {} as Record<number, number>,
-    );
+  // Step 2: 빈도순 정리표 생성
+  const handleGenerateFrequencyTable = useCallback(() => {
+    const result = getFrequencyTable(draws, drawCount);
+    setFrequencyTable(result.table);
+    setByRange(result.byRange);
+    setCount45(result.count45);
+    setCurrentStep(2);
+  }, [draws]);
 
-    return matchCounts;
-  };
+  // Step 3: 10주 내 번호 필터링
+  const handleFilterNumbers = useCallback(() => {
+    if (!byRange) return;
+    const result = filterCandidateNumbers(byRange, draws, 10, 2);
+    setCandidates(result.candidates);
+    setAllCandidates(result.allCandidates);
+    setRecentNumbers(result.recentNumbers);
+    setExcludedNumbers(result.excludedNumbers);
+    setCurrentStep(3);
+  }, [byRange, draws]);
 
-  const matchStats = results.length > 0 ? getMatchStats() : {};
+  // Step 4 & 5: 조합 생성 + 과거 비교
+  const handleGenerateCombinations = useCallback(() => {
+    setLoading(true);
+    setError(null);
+
+    // 비동기로 처리하여 UI 블로킹 방지
+    setTimeout(() => {
+      try {
+        // 15개 단위로 나눠서 C(15,6) 조합 생성
+        const combos = splitAndCombine(allCandidates, 15);
+        setGeneratedCombos(combos);
+
+        // 과거 100회와 비교하여 3개 이상 일치 제외
+        const result = filterByHistoricalMatch(combos, draws, 3);
+        setFilteredCombos(result.filtered);
+        setFilterStats({
+          before: result.beforeCount,
+          after: result.afterCount,
+          excluded: result.beforeCount - result.afterCount,
+        });
+
+        setCurrentStep(4);
+      } catch (err) {
+        setError('조합 생성 중 오류가 발생했습니다.');
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    }, 50);
+  }, [allCandidates, draws]);
+
+  // Step 6: 그룹핑
+  const handleGroupCombinations = useCallback(() => {
+    setLoading(true);
+    setTimeout(() => {
+      try {
+        const g5 = groupBySharedNumbers(filteredCombos, 5);
+        const g4 = groupBySharedNumbers(filteredCombos, 4);
+        setGroups5(g5);
+        setGroups4(g4);
+        setCurrentStep(5);
+      } catch (err) {
+        setError('그룹핑 중 오류가 발생했습니다.');
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    }, 50);
+  }, [filteredCombos]);
+
+  const steps = [
+    { label: '데이터 로딩', description: '최근 100주 당첨 데이터' },
+    { label: '빈도순 정리표', description: '100주간 번호 출현 빈도' },
+    { label: '번호 필터링', description: '10주 내 번호 필터링' },
+    { label: '조합 생성', description: '후보 번호에서 조합 생성' },
+    { label: '과거 비교', description: '과거 데이터와 비교 필터링' },
+    { label: '그룹핑 결과', description: '최종 추천 조합' },
+  ];
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">조합 검증</h1>
         <p className="text-gray-600">
-          선택한 번호의 과거 당첨번호와의 일치도를 분석합니다
+          기획안 기반 로또 번호 조합 생성 및 검증 시스템
         </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* 번호 선택 */}
-        <div className="space-y-6">
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h2 className="text-xl font-bold mb-4 text-gray-800">
-              번호 선택
-            </h2>
-            <NumberPicker
-              selectedNumbers={selectedNumbers}
-              onChange={setSelectedNumbers}
-              maxSelection={15}
-            />
-          </div>
-
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h2 className="text-xl font-bold mb-4 text-gray-800">
-              검증 범위
-            </h2>
-            <div className="grid grid-cols-2 gap-4 mb-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  시작 회차
-                </label>
-                <input
-                  type="number"
-                  value={roundRange.start}
-                  onChange={(e) =>
-                    setRoundRange({
-                      ...roundRange,
-                      start: parseInt(e.target.value) || 1,
-                    })
-                  }
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
-                  min="1"
-                />
+      {/* 스텝 인디케이터 */}
+      <div className="mb-8 overflow-x-auto">
+        <div className="flex items-center min-w-max gap-1">
+          {steps.map((step, idx) => (
+            <div key={idx} className="flex items-center">
+              <div
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${
+                  idx < currentStep
+                    ? 'bg-green-100 text-green-800'
+                    : idx === currentStep
+                      ? 'bg-blue-100 text-blue-800 font-bold'
+                      : 'bg-gray-100 text-gray-400'
+                }`}
+              >
+                <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                  idx < currentStep
+                    ? 'bg-green-500 text-white'
+                    : idx === currentStep
+                      ? 'bg-blue-500 text-white'
+                      : 'bg-gray-300 text-white'
+                }`}>
+                  {idx < currentStep ? '✓' : idx + 1}
+                </span>
+                <span className="whitespace-nowrap">{step.label}</span>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  종료 회차
-                </label>
-                <input
-                  type="number"
-                  value={roundRange.end}
-                  onChange={(e) =>
-                    setRoundRange({
-                      ...roundRange,
-                      end: parseInt(e.target.value) || 100,
-                    })
-                  }
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
-                  min="1"
-                />
-              </div>
+              {idx < steps.length - 1 && (
+                <div className={`w-6 h-0.5 ${idx < currentStep ? 'bg-green-300' : 'bg-gray-200'}`} />
+              )}
             </div>
-
-            <button
-              onClick={handleValidate}
-              disabled={loading || selectedNumbers.length === 0 || selectedNumbers.length > 15}
-              className="w-full px-6 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors font-bold disabled:bg-gray-400 disabled:cursor-not-allowed"
-            >
-              {loading ? '검증 중...' : '검증 시작'}
-            </button>
-
-            {error && (
-              <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-                <p className="text-red-600">{error}</p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* 결과 표시 */}
-        <div className="space-y-6">
-          {selectedNumbers.length > 0 && (
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <h2 className="text-xl font-bold mb-4 text-gray-800">
-                선택된 번호
-              </h2>
-              <div className="flex justify-center">
-                <LottoNumberSet numbers={selectedNumbers} size="lg" showRangeLabels />
-              </div>
-            </div>
-          )}
-
-          {results.length > 0 && (
-            <>
-              {/* 매칭 통계 */}
-              <div className="bg-white rounded-lg shadow-md p-6">
-                <h2 className="text-xl font-bold mb-4 text-gray-800">
-                  일치 통계
-                </h2>
-                <div className="space-y-2">
-                  {[6, 5, 4, 3, 2, 1, 0].map((count) => (
-                    <div
-                      key={count}
-                      className="flex justify-between items-center p-3 bg-gray-50 rounded-lg"
-                    >
-                      <span className="font-medium text-gray-700">
-                        {count}개 일치
-                      </span>
-                      <span className="font-bold text-blue-600">
-                        {matchStats[count] || 0}회
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* 상세 결과 */}
-              <div className="bg-white rounded-lg shadow-md p-6">
-                <h2 className="text-xl font-bold mb-4 text-gray-800">
-                  상세 결과
-                  <span className="ml-2 text-sm font-normal text-gray-500">
-                    (3개 이상 일치만 표시)
-                  </span>
-                </h2>
-                <div className="space-y-3 max-h-96 overflow-y-auto">
-                  {results
-                    .filter((result) => result.matchCount >= 3)
-                    .map((result) => (
-                      <div
-                        key={result.round}
-                        className={`p-4 rounded-lg ${
-                          result.matchCount === 6
-                            ? 'bg-yellow-100 border-2 border-yellow-400'
-                            : result.matchCount === 5
-                              ? 'bg-orange-100 border-2 border-orange-400'
-                              : result.matchCount === 4
-                                ? 'bg-blue-100 border-2 border-blue-400'
-                                : 'bg-gray-100'
-                        }`}
-                      >
-                        <div className="flex justify-between items-center mb-2">
-                          <span className="font-bold text-gray-800">
-                            {result.round}회
-                          </span>
-                          <span
-                            className={`px-3 py-1 rounded-full text-sm font-bold ${
-                              result.matchCount === 6
-                                ? 'bg-yellow-500 text-white'
-                                : result.matchCount === 5
-                                  ? 'bg-orange-500 text-white'
-                                  : result.matchCount === 4
-                                    ? 'bg-blue-500 text-white'
-                                    : 'bg-gray-500 text-white'
-                            }`}
-                          >
-                            {result.matchCount}개 일치
-                          </span>
-                        </div>
-                        <div className="flex gap-2">
-                          {result.matchedNumbers.map((num) => (
-                            <div
-                              key={num}
-                              className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center text-white font-bold text-sm"
-                            >
-                              {num}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                </div>
-              </div>
-            </>
-          )}
+          ))}
         </div>
       </div>
+
+      {/* 에러 표시 */}
+      {error && (
+        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+          <p className="text-red-600 font-medium">{error}</p>
+        </div>
+      )}
+
+      {/* Step 0: 시작 */}
+      {currentStep === 0 && (
+        <div className="bg-white rounded-lg shadow-md p-8">
+          <h2 className="text-2xl font-bold text-gray-800 mb-2 text-center">조합 생성 시작</h2>
+          <p className="text-gray-600 mb-6 text-center">
+            당첨 데이터를 기반으로 로또 번호 조합을 자동 생성합니다.
+          </p>
+
+          {/* 로딩 모드 선택 */}
+          <div className="max-w-md mx-auto space-y-4">
+            <div className="flex gap-2">
+              <button
+                onClick={() => setLoadMode('recent')}
+                className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-colors ${
+                  loadMode === 'recent'
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                최근 N회차
+              </button>
+              <button
+                onClick={() => setLoadMode('range')}
+                className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-colors ${
+                  loadMode === 'range'
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                회차 범위 지정
+              </button>
+            </div>
+
+            {loadMode === 'recent' ? (
+              <div className="bg-gray-50 rounded-lg p-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">분석 회차 수</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    value={drawCount}
+                    onChange={(e) => setDrawCount(Math.max(10, Math.min(500, parseInt(e.target.value) || 100)))}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-center text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    min="10"
+                    max="500"
+                  />
+                  <span className="text-sm text-gray-500">회</span>
+                </div>
+                <p className="text-xs text-gray-400 mt-1">최신 회차부터 역순으로 {drawCount}회차를 불러옵니다</p>
+              </div>
+            ) : (
+              <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">시작 회차</label>
+                  <input
+                    type="number"
+                    value={rangeStart}
+                    onChange={(e) => setRangeStart(parseInt(e.target.value) || 1)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    min="1"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">종료 회차</label>
+                  <input
+                    type="number"
+                    value={rangeEnd}
+                    onChange={(e) => setRangeEnd(parseInt(e.target.value) || 1)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    min="1"
+                  />
+                </div>
+                <p className="text-xs text-gray-400">{rangeStart}회 ~ {rangeEnd}회 ({Math.abs(rangeEnd - rangeStart) + 1}회차)</p>
+              </div>
+            )}
+
+            <button
+              onClick={handleLoadData}
+              disabled={loading}
+              className="w-full px-8 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-bold disabled:bg-gray-400"
+            >
+              {loading
+                ? '로딩 중...'
+                : loadMode === 'recent'
+                  ? `최근 ${drawCount}회 데이터 로딩`
+                  : `${rangeStart}회 ~ ${rangeEnd}회 데이터 로딩`}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Step 1: 데이터 로딩 완료 */}
+      {currentStep >= 1 && (
+        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-bold text-gray-800">Step 1: 데이터 로딩 완료</h2>
+            <button
+              onClick={() => setCurrentStep(0)}
+              className="text-sm text-blue-500 hover:text-blue-700 font-medium"
+            >
+              설정 변경
+            </button>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+            <div className="bg-gray-50 p-3 rounded-lg">
+              <div className="text-gray-500">총 회차</div>
+              <div className="text-lg font-bold text-gray-900">{draws.length}회</div>
+            </div>
+            <div className="bg-gray-50 p-3 rounded-lg">
+              <div className="text-gray-500">최신 회차</div>
+              <div className="text-lg font-bold text-gray-900">
+                {Math.max(draws[0]?.round || 0, draws[draws.length - 1]?.round || 0)}회
+              </div>
+            </div>
+            <div className="bg-gray-50 p-3 rounded-lg">
+              <div className="text-gray-500">시작 회차</div>
+              <div className="text-lg font-bold text-gray-900">
+                {Math.min(draws[0]?.round || 0, draws[draws.length - 1]?.round || 0)}회
+              </div>
+            </div>
+            <div className="bg-gray-50 p-3 rounded-lg">
+              <div className="text-gray-500">기간</div>
+              <div className="text-lg font-bold text-gray-900">
+                {draws[draws.length - 1]?.drawDate || '-'} ~ {draws[0]?.drawDate || '-'}
+              </div>
+            </div>
+          </div>
+          {currentStep === 1 && (
+            <button
+              onClick={handleGenerateFrequencyTable}
+              className="mt-4 px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-bold"
+            >
+              다음: 빈도순 정리표 생성
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Step 2: 100주 빈도순 정리표 */}
+      {currentStep >= 2 && (
+        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+          <h2 className="text-xl font-bold text-gray-800 mb-4">
+            Step 2: {draws.length}주 DATA 빈도순 정리표
+          </h2>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="bg-gray-100">
+                  <th className="border border-gray-300 px-3 py-2 text-center">순위</th>
+                  {RANGE_KEYS.map((key) => (
+                    <th key={key} className="border border-gray-300 px-3 py-2 text-center">
+                      <span className={`${RANGE_COLORS[key]} text-white px-2 py-0.5 rounded text-xs`}>
+                        {key}번대
+                      </span>
+                    </th>
+                  ))}
+                  <th className="border border-gray-300 px-3 py-2 text-center">45</th>
+                </tr>
+              </thead>
+              <tbody>
+                {frequencyTable.map((row, idx) => {
+                  const isHighlighted = idx >= 10 && idx <= 18;
+                  return (
+                    <tr
+                      key={row.rank}
+                      className={`${isHighlighted ? 'bg-yellow-50' : idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}
+                    >
+                      <td className="border border-gray-300 px-3 py-1.5 text-center font-medium text-gray-600">
+                        {row.rank}
+                      </td>
+                      {RANGE_KEYS.map((key) => {
+                        const entry = row[key] as FrequencyEntry | null;
+                        return (
+                          <td key={key} className="border border-gray-300 px-3 py-1.5 text-center">
+                            {entry ? (
+                              <span className="inline-flex items-center gap-1">
+                                <LottoBall num={entry.number} />
+                                <span className="text-gray-500 text-xs">({entry.count})</span>
+                              </span>
+                            ) : (
+                              <span className="text-gray-300">-</span>
+                            )}
+                          </td>
+                        );
+                      })}
+                      <td className="border border-gray-300 px-3 py-1.5 text-center text-gray-600">
+                        {idx === 0 ? count45 : '-'}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-2 text-xs text-gray-500">
+            노란색 강조: 11번~19번 행 (필터링 대상 범위)
+          </p>
+          {currentStep === 2 && (
+            <button
+              onClick={handleFilterNumbers}
+              className="mt-4 px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-bold"
+            >
+              다음: 10주 내 번호 필터링
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Step 3: 10주 내 번호 필터링 */}
+      {currentStep >= 3 && candidates && (
+        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+          <h2 className="text-xl font-bold text-gray-800 mb-4">
+            Step 3: 10주 내 번호 필터링
+          </h2>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            {/* 최근 10주 출현 번호 */}
+            <div className="bg-blue-50 rounded-lg p-4">
+              <h3 className="font-bold text-blue-800 mb-2">최근 10주 출현 번호</h3>
+              <div className="flex flex-wrap gap-1.5">
+                {Array.from(recentNumbers)
+                  .sort((a, b) => a - b)
+                  .map((num) => (
+                    <LottoBall key={num} num={num} />
+                  ))}
+              </div>
+              <p className="mt-2 text-xs text-blue-600">{recentNumbers.size}개 번호</p>
+            </div>
+
+            {/* 최근 2주 번호 (제외 대상) */}
+            <div className="bg-red-50 rounded-lg p-4">
+              <h3 className="font-bold text-red-800 mb-2">최근 2주 번호 (제외)</h3>
+              <div className="flex flex-wrap gap-1.5">
+                {Array.from(excludedNumbers)
+                  .sort((a, b) => a - b)
+                  .map((num) => (
+                    <LottoBall key={num} num={num} />
+                  ))}
+              </div>
+              <p className="mt-2 text-xs text-red-600">{excludedNumbers.size}개 번호 제외</p>
+            </div>
+          </div>
+
+          {/* 범대별 최종 후보 */}
+          <div className="bg-green-50 rounded-lg p-4">
+            <h3 className="font-bold text-green-800 mb-3">최종 후보 번호 (범대별)</h3>
+            <div className="space-y-2">
+              {RANGE_KEYS.map((key) => (
+                <div key={key} className="flex items-center gap-3">
+                  <span className={`${RANGE_COLORS[key]} text-white px-2 py-0.5 rounded text-xs font-bold w-14 text-center`}>
+                    {key}번대
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {candidates[key].length > 0 ? (
+                      candidates[key].map((num) => (
+                        <LottoBall key={num} num={num} size="md" />
+                      ))
+                    ) : (
+                      <span className="text-gray-400 text-sm">없음</span>
+                    )}
+                  </div>
+                  <span className="text-xs text-gray-500">({candidates[key].length}개)</span>
+                </div>
+              ))}
+            </div>
+            <div className="mt-3 pt-3 border-t border-green-200">
+              <span className="font-bold text-green-800">
+                총 후보: {allCandidates.length}개
+              </span>
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {allCandidates.map((num) => (
+                  <LottoBall key={num} num={num} size="md" />
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {currentStep === 3 && (
+            <button
+              onClick={handleGenerateCombinations}
+              disabled={loading || allCandidates.length < 6}
+              className="mt-4 px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-bold disabled:bg-gray-400"
+            >
+              {loading
+                ? '조합 생성 중...'
+                : allCandidates.length < 6
+                  ? '후보 번호가 6개 미만입니다'
+                  : `다음: ${allCandidates.length}개 번호로 조합 생성`}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Step 4 & 5: 조합 생성 + 과거 비교 결과 */}
+      {currentStep >= 4 && (
+        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+          <h2 className="text-xl font-bold text-gray-800 mb-4">
+            Step 4-5: 조합 생성 및 과거 데이터 비교
+          </h2>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div className="bg-blue-50 rounded-lg p-4 text-center">
+              <div className="text-sm text-blue-600">생성된 조합 수</div>
+              <div className="text-2xl font-bold text-blue-800">
+                {filterStats.before.toLocaleString()}개
+              </div>
+              <div className="text-xs text-blue-500">
+                C({Math.min(allCandidates.length, 15)},6) x {Math.ceil(allCandidates.length / 15)} 그룹
+              </div>
+            </div>
+            <div className="bg-red-50 rounded-lg p-4 text-center">
+              <div className="text-sm text-red-600">제외된 조합 수</div>
+              <div className="text-2xl font-bold text-red-800">
+                {filterStats.excluded.toLocaleString()}개
+              </div>
+              <div className="text-xs text-red-500">과거 100회와 3개 이상 일치</div>
+            </div>
+            <div className="bg-green-50 rounded-lg p-4 text-center">
+              <div className="text-sm text-green-600">최종 조합 수</div>
+              <div className="text-2xl font-bold text-green-800">
+                {filterStats.after.toLocaleString()}개
+              </div>
+              <div className="text-xs text-green-500">
+                필터율: {filterStats.before > 0
+                  ? ((filterStats.excluded / filterStats.before) * 100).toFixed(1)
+                  : 0}%
+              </div>
+            </div>
+          </div>
+
+          {/* 필터링된 조합 미리보기 */}
+          <div className="bg-gray-50 rounded-lg p-4">
+            <h3 className="font-bold text-gray-700 mb-3">
+              필터링된 조합 미리보기 (상위 20개)
+            </h3>
+            <div className="space-y-2 max-h-80 overflow-y-auto">
+              {filteredCombos.slice(0, 20).map((combo, idx) => (
+                <div key={idx} className="flex items-center gap-2 bg-white p-2 rounded">
+                  <span className="text-xs text-gray-400 w-8 text-right">#{idx + 1}</span>
+                  <div className="flex gap-1.5">
+                    {combo.map((num) => (
+                      <LottoBall key={num} num={num} size="md" />
+                    ))}
+                  </div>
+                </div>
+              ))}
+              {filteredCombos.length > 20 && (
+                <p className="text-xs text-gray-400 text-center py-2">
+                  ... 외 {(filteredCombos.length - 20).toLocaleString()}개 조합
+                </p>
+              )}
+            </div>
+          </div>
+
+          {currentStep === 4 && (
+            <button
+              onClick={handleGroupCombinations}
+              disabled={loading || filteredCombos.length === 0}
+              className="mt-4 px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-bold disabled:bg-gray-400"
+            >
+              {loading ? '그룹핑 중...' : '다음: 그룹핑 분석'}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Step 6: 그룹핑 결과 */}
+      {currentStep >= 5 && (
+        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+          <h2 className="text-xl font-bold text-gray-800 mb-4">
+            Step 6: 그룹핑 결과
+          </h2>
+
+          {/* 5개 공유 그룹 */}
+          <div className="mb-6">
+            <h3 className="font-bold text-purple-800 mb-3 flex items-center gap-2">
+              <span className="bg-purple-100 text-purple-800 px-2 py-0.5 rounded text-sm">
+                5개 번호 공유 그룹
+              </span>
+              <span className="text-sm text-gray-500">{groups5.length}개 그룹</span>
+            </h3>
+            {groups5.length > 0 ? (
+              <div className="space-y-4 max-h-96 overflow-y-auto">
+                {groups5.map((group, gIdx) => (
+                  <div key={gIdx} className="bg-purple-50 rounded-lg p-4">
+                    <div className="mb-2">
+                      <span className="text-xs text-purple-600 font-medium">공유 번호:</span>
+                      <div className="flex gap-1.5 mt-1">
+                        {group.sharedNumbers.map((num) => (
+                          <LottoBall key={num} num={num} size="md" />
+                        ))}
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      {group.combinations.map((combo, cIdx) => (
+                        <div key={cIdx} className="flex items-center gap-2 bg-white p-2 rounded">
+                          <div className="flex gap-1.5">
+                            {combo.numbers.map((num) => (
+                              <LottoBall key={num} num={num} />
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <span className="text-xs text-purple-500">{group.combinations.length}개 조합</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-gray-400 text-sm">5개 번호를 공유하는 그룹이 없습니다.</p>
+            )}
+          </div>
+
+          {/* 4개 공유 그룹 */}
+          <div>
+            <h3 className="font-bold text-indigo-800 mb-3 flex items-center gap-2">
+              <span className="bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded text-sm">
+                4개 번호 공유 그룹
+              </span>
+              <span className="text-sm text-gray-500">{groups4.length}개 그룹</span>
+            </h3>
+            {groups4.length > 0 ? (
+              <div className="space-y-4 max-h-96 overflow-y-auto">
+                {groups4.slice(0, 30).map((group, gIdx) => (
+                  <div key={gIdx} className="bg-indigo-50 rounded-lg p-4">
+                    <div className="mb-2">
+                      <span className="text-xs text-indigo-600 font-medium">공유 번호:</span>
+                      <div className="flex gap-1.5 mt-1">
+                        {group.sharedNumbers.map((num) => (
+                          <LottoBall key={num} num={num} size="md" />
+                        ))}
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      {group.combinations.map((combo, cIdx) => (
+                        <div key={cIdx} className="flex items-center gap-2 bg-white p-2 rounded">
+                          <div className="flex gap-1.5">
+                            {combo.numbers.map((num) => (
+                              <LottoBall key={num} num={num} />
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <span className="text-xs text-indigo-500">{group.combinations.length}개 조합</span>
+                  </div>
+                ))}
+                {groups4.length > 30 && (
+                  <p className="text-xs text-gray-400 text-center py-2">
+                    ... 외 {groups4.length - 30}개 그룹
+                  </p>
+                )}
+              </div>
+            ) : (
+              <p className="text-gray-400 text-sm">4개 번호를 공유하는 그룹이 없습니다.</p>
+            )}
+          </div>
+
+          {/* 최종 요약 */}
+          <div className="mt-6 bg-gradient-to-r from-blue-50 to-green-50 rounded-lg p-4">
+            <h3 className="font-bold text-gray-800 mb-2">최종 요약</h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+              <div>
+                <span className="text-gray-500">분석 데이터</span>
+                <div className="font-bold">{draws.length}회차</div>
+              </div>
+              <div>
+                <span className="text-gray-500">후보 번호</span>
+                <div className="font-bold">{allCandidates.length}개</div>
+              </div>
+              <div>
+                <span className="text-gray-500">최종 조합</span>
+                <div className="font-bold">{filterStats.after.toLocaleString()}개</div>
+              </div>
+              <div>
+                <span className="text-gray-500">그룹 (5개/4개)</span>
+                <div className="font-bold">{groups5.length} / {groups4.length}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 전체 리셋 버튼 */}
+      {currentStep > 0 && (
+        <div className="text-center mt-6">
+          <button
+            onClick={() => {
+              setCurrentStep(0);
+              setDraws([]);
+              setFrequencyTable([]);
+              setByRange(null);
+              setCandidates(null);
+              setAllCandidates([]);
+              setRecentNumbers(new Set());
+              setExcludedNumbers(new Set());
+              setGeneratedCombos([]);
+              setFilteredCombos([]);
+              setFilterStats({ before: 0, after: 0, excluded: 0 });
+              setGroups5([]);
+              setGroups4([]);
+              setError(null);
+            }}
+            className="px-6 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+          >
+            처음부터 다시 시작
+          </button>
+        </div>
+      )}
     </div>
   );
 }

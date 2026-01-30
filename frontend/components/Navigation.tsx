@@ -2,18 +2,19 @@
  * 네비게이션 컴포넌트
  */
 
-'use client';
+"use client";
 
-import React from 'react';
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import React from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 const navItems = [
-  { href: '/', label: '대시보드', icon: '📊' },
-  { href: '/generate', label: '번호 생성', icon: '🎲' },
-  { href: '/statistics', label: '통계 분석', icon: '📈' },
-  { href: '/validate', label: '조합 검증', icon: '✓' },
-  { href: '/admin', label: '데이터 관리', icon: '⚙️' },
+  { href: "/", label: "대시보드", icon: "📊" },
+  { href: "/generate", label: "번호 생성", icon: "🎲" },
+  { href: "/statistics", label: "통계 분석", icon: "📈" },
+  { href: "/validate", label: "조합 검증", icon: "✓" },
+  { href: "/analyze", label: "조합 번호", icon: "🔍" },
+  { href: "/admin", label: "데이터 관리", icon: "⚙️" },
 ];
 
 export const Navigation: React.FC = () => {
@@ -41,8 +42,8 @@ export const Navigation: React.FC = () => {
                   href={item.href}
                   className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all font-medium ${
                     isActive
-                      ? 'bg-blue-500 text-white shadow-md'
-                      : 'text-gray-700 hover:bg-gray-100'
+                      ? "bg-blue-500 text-white shadow-md"
+                      : "text-gray-700 hover:bg-gray-100"
                   }`}
                 >
                   <span>{item.icon}</span>
