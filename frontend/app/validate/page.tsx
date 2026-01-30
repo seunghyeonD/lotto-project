@@ -3,17 +3,17 @@
  * 기획안 기반 6단계 흐름: 데이터 로딩 → 빈도표 → 필터링 → 조합 생성 → 과거 비교 → 그룹핑
  */
 
-'use client';
+"use client";
 
-import React, { useState, useCallback } from 'react';
-import { lottoApi } from '@/lib/api';
+import React, { useState, useCallback } from "react";
+import { lottoApi } from "@/lib/api";
 import {
   LottoNumber as LottoNumberType,
   LottoDrawResult,
   FrequencyRow,
   FrequencyEntry,
   CombinationGroup,
-} from '@/types/lotto';
+} from "@/types/lotto";
 import {
   getFrequencyTable,
   filterCandidateNumbers,
@@ -21,25 +21,33 @@ import {
   filterByHistoricalMatch,
   groupBySharedNumbers,
   getNumberRange,
-} from '@/lib/combination-generator';
+} from "@/lib/combination-generator";
 
-type RangeKey = '단' | '십' | '이' | '삼' | '사';
-const RANGE_KEYS: RangeKey[] = ['단', '십', '이', '삼', '사'];
+type RangeKey = "단" | "십" | "이" | "삼" | "사";
+const RANGE_KEYS: RangeKey[] = ["단", "십", "이", "삼", "사"];
 
 const RANGE_COLORS: Record<RangeKey, string> = {
-  '단': 'bg-yellow-500',
-  '십': 'bg-blue-500',
-  '이': 'bg-red-500',
-  '삼': 'bg-gray-700',
-  '사': 'bg-green-500',
+  단: "bg-yellow-500",
+  십: "bg-blue-500",
+  이: "bg-red-500",
+  삼: "bg-gray-700",
+  사: "bg-green-500",
 };
 
-function LottoBall({ num, size = 'sm' }: { num: LottoNumberType; size?: 'sm' | 'md' }) {
+function LottoBall({
+  num,
+  size = "sm",
+}: {
+  num: LottoNumberType;
+  size?: "sm" | "md";
+}) {
   const range = getNumberRange(num);
   const color = RANGE_COLORS[range];
-  const sizeClass = size === 'md' ? 'w-10 h-10 text-base' : 'w-7 h-7 text-xs';
+  const sizeClass = size === "md" ? "w-10 h-10 text-base" : "w-7 h-7 text-xs";
   return (
-    <span className={`${color} ${sizeClass} rounded-full inline-flex items-center justify-center text-white font-bold`}>
+    <span
+      className={`${color} ${sizeClass} rounded-full inline-flex items-center justify-center text-white font-bold`}
+    >
       {num}
     </span>
   );
@@ -51,26 +59,42 @@ export default function ValidatePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [drawCount, setDrawCount] = useState(100);
-  const [loadMode, setLoadMode] = useState<'recent' | 'range'>('recent');
+  const [loadMode, setLoadMode] = useState<"recent" | "range">("recent");
   const [rangeStart, setRangeStart] = useState(1109);
   const [rangeEnd, setRangeEnd] = useState(1208);
 
   // 데이터
   const [draws, setDraws] = useState<LottoDrawResult[]>([]);
   const [frequencyTable, setFrequencyTable] = useState<FrequencyRow[]>([]);
-  const [byRange, setByRange] = useState<Record<RangeKey, FrequencyEntry[]> | null>(null);
+  const [byRange, setByRange] = useState<Record<
+    RangeKey,
+    FrequencyEntry[]
+  > | null>(null);
   const [count45, setCount45] = useState(0);
 
   // 필터링 결과
-  const [candidates, setCandidates] = useState<Record<RangeKey, LottoNumberType[]> | null>(null);
+  const [candidates, setCandidates] = useState<Record<
+    RangeKey,
+    LottoNumberType[]
+  > | null>(null);
   const [allCandidates, setAllCandidates] = useState<LottoNumberType[]>([]);
-  const [recentNumbers, setRecentNumbers] = useState<Set<LottoNumberType>>(new Set());
-  const [excludedNumbers, setExcludedNumbers] = useState<Set<LottoNumberType>>(new Set());
+  const [recentNumbers, setRecentNumbers] = useState<Set<LottoNumberType>>(
+    new Set()
+  );
+  const [excludedNumbers, setExcludedNumbers] = useState<Set<LottoNumberType>>(
+    new Set()
+  );
 
   // 조합 결과
-  const [generatedCombos, setGeneratedCombos] = useState<LottoNumberType[][]>([]);
+  const [generatedCombos, setGeneratedCombos] = useState<LottoNumberType[][]>(
+    []
+  );
   const [filteredCombos, setFilteredCombos] = useState<LottoNumberType[][]>([]);
-  const [filterStats, setFilterStats] = useState({ before: 0, after: 0, excluded: 0 });
+  const [filterStats, setFilterStats] = useState({
+    before: 0,
+    after: 0,
+    excluded: 0,
+  });
 
   // 그룹핑 결과
   const [groups5, setGroups5] = useState<CombinationGroup[]>([]);
@@ -82,7 +106,7 @@ export default function ValidatePage() {
       setLoading(true);
       setError(null);
       let recentDraws: LottoDrawResult[];
-      if (loadMode === 'recent') {
+      if (loadMode === "recent") {
         recentDraws = await lottoApi.getRecentDraws(drawCount);
       } else {
         recentDraws = await lottoApi.getDrawsInRange(rangeStart, rangeEnd);
@@ -90,7 +114,7 @@ export default function ValidatePage() {
       setDraws(recentDraws);
       setCurrentStep(1);
     } catch (err) {
-      setError('데이터 로딩에 실패했습니다. API 서버를 확인해주세요.');
+      setError("데이터 로딩에 실패했습니다. API 서버를 확인해주세요.");
       console.error(err);
     } finally {
       setLoading(false);
@@ -140,7 +164,7 @@ export default function ValidatePage() {
 
         setCurrentStep(4);
       } catch (err) {
-        setError('조합 생성 중 오류가 발생했습니다.');
+        setError("조합 생성 중 오류가 발생했습니다.");
         console.error(err);
       } finally {
         setLoading(false);
@@ -159,7 +183,7 @@ export default function ValidatePage() {
         setGroups4(g4);
         setCurrentStep(5);
       } catch (err) {
-        setError('그룹핑 중 오류가 발생했습니다.');
+        setError("그룹핑 중 오류가 발생했습니다.");
         console.error(err);
       } finally {
         setLoading(false);
@@ -168,12 +192,12 @@ export default function ValidatePage() {
   }, [filteredCombos]);
 
   const steps = [
-    { label: '데이터 로딩', description: '최근 100주 당첨 데이터' },
-    { label: '빈도순 정리표', description: '100주간 번호 출현 빈도' },
-    { label: '번호 필터링', description: '10주 내 번호 필터링' },
-    { label: '조합 생성', description: '후보 번호에서 조합 생성' },
-    { label: '과거 비교', description: '과거 데이터와 비교 필터링' },
-    { label: '그룹핑 결과', description: '최종 추천 조합' },
+    { label: "데이터 로딩", description: "최근 100주 당첨 데이터" },
+    { label: "빈도순 정리표", description: "100주간 번호 출현 빈도" },
+    { label: "번호 필터링", description: "10주 내 번호 필터링" },
+    { label: "조합 생성", description: "후보 번호에서 조합 생성" },
+    { label: "과거 비교", description: "과거 데이터와 비교 필터링" },
+    { label: "그룹핑 결과", description: "최종 추천 조합" },
   ];
 
   return (
@@ -193,25 +217,31 @@ export default function ValidatePage() {
               <div
                 className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${
                   idx < currentStep
-                    ? 'bg-green-100 text-green-800'
+                    ? "bg-green-100 text-green-800"
                     : idx === currentStep
-                      ? 'bg-blue-100 text-blue-800 font-bold'
-                      : 'bg-gray-100 text-gray-400'
+                    ? "bg-blue-100 text-blue-800 font-bold"
+                    : "bg-gray-100 text-gray-400"
                 }`}
               >
-                <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                  idx < currentStep
-                    ? 'bg-green-500 text-white'
-                    : idx === currentStep
-                      ? 'bg-blue-500 text-white'
-                      : 'bg-gray-300 text-white'
-                }`}>
-                  {idx < currentStep ? '✓' : idx + 1}
+                <span
+                  className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                    idx < currentStep
+                      ? "bg-green-500 text-white"
+                      : idx === currentStep
+                      ? "bg-blue-500 text-white"
+                      : "bg-gray-300 text-white"
+                  }`}
+                >
+                  {idx < currentStep ? "✓" : idx + 1}
                 </span>
                 <span className="whitespace-nowrap">{step.label}</span>
               </div>
               {idx < steps.length - 1 && (
-                <div className={`w-6 h-0.5 ${idx < currentStep ? 'bg-green-300' : 'bg-gray-200'}`} />
+                <div
+                  className={`w-6 h-0.5 ${
+                    idx < currentStep ? "bg-green-300" : "bg-gray-200"
+                  }`}
+                />
               )}
             </div>
           ))}
@@ -228,7 +258,9 @@ export default function ValidatePage() {
       {/* Step 0: 시작 */}
       {currentStep === 0 && (
         <div className="bg-white rounded-lg shadow-md p-8">
-          <h2 className="text-2xl font-bold text-gray-800 mb-2 text-center">조합 생성 시작</h2>
+          <h2 className="text-2xl font-bold text-gray-800 mb-2 text-center">
+            조합 생성 시작
+          </h2>
           <p className="text-gray-600 mb-6 text-center">
             당첨 데이터를 기반으로 로또 번호 조합을 자동 생성합니다.
           </p>
@@ -237,57 +269,74 @@ export default function ValidatePage() {
           <div className="max-w-md mx-auto space-y-4">
             <div className="flex gap-2">
               <button
-                onClick={() => setLoadMode('recent')}
+                onClick={() => setLoadMode("recent")}
                 className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-colors ${
-                  loadMode === 'recent'
-                    ? 'bg-blue-500 text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  loadMode === "recent"
+                    ? "bg-blue-500 text-white"
+                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                 }`}
               >
                 최근 N회차
               </button>
               <button
-                onClick={() => setLoadMode('range')}
+                onClick={() => setLoadMode("range")}
                 className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-colors ${
-                  loadMode === 'range'
-                    ? 'bg-blue-500 text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  loadMode === "range"
+                    ? "bg-blue-500 text-white"
+                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                 }`}
               >
                 회차 범위 지정
               </button>
             </div>
 
-            {loadMode === 'recent' ? (
+            {loadMode === "recent" ? (
               <div className="bg-gray-50 rounded-lg p-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">분석 회차 수</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  분석 회차 수
+                </label>
                 <div className="flex items-center gap-2">
                   <input
                     type="number"
                     value={drawCount}
-                    onChange={(e) => setDrawCount(Math.max(10, Math.min(500, parseInt(e.target.value) || 100)))}
+                    onChange={(e) =>
+                      setDrawCount(
+                        Math.max(
+                          10,
+                          Math.min(500, parseInt(e.target.value) || 100)
+                        )
+                      )
+                    }
                     className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-center text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     min="10"
                     max="500"
                   />
                   <span className="text-sm text-gray-500">회</span>
                 </div>
-                <p className="text-xs text-gray-400 mt-1">최신 회차부터 역순으로 {drawCount}회차를 불러옵니다</p>
+                <p className="text-xs text-gray-400 mt-1">
+                  최신 회차부터 역순으로 {drawCount}회차를 불러옵니다
+                </p>
               </div>
             ) : (
               <div className="bg-gray-50 rounded-lg p-4 space-y-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">시작 회차</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    시작 회차
+                  </label>
                   <input
                     type="number"
                     value={rangeStart}
-                    onChange={(e) => setRangeStart(parseInt(e.target.value) || 1)}
+                    onChange={(e) =>
+                      setRangeStart(parseInt(e.target.value) || 1)
+                    }
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     min="1"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">종료 회차</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    종료 회차
+                  </label>
                   <input
                     type="number"
                     value={rangeEnd}
@@ -296,7 +345,10 @@ export default function ValidatePage() {
                     min="1"
                   />
                 </div>
-                <p className="text-xs text-gray-400">{rangeStart}회 ~ {rangeEnd}회 ({Math.abs(rangeEnd - rangeStart) + 1}회차)</p>
+                <p className="text-xs text-gray-400">
+                  {rangeStart}회 ~ {rangeEnd}회 (
+                  {Math.abs(rangeEnd - rangeStart) + 1}회차)
+                </p>
               </div>
             )}
 
@@ -306,10 +358,10 @@ export default function ValidatePage() {
               className="w-full px-8 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-bold disabled:bg-gray-400"
             >
               {loading
-                ? '로딩 중...'
-                : loadMode === 'recent'
-                  ? `최근 ${drawCount}회 데이터 로딩`
-                  : `${rangeStart}회 ~ ${rangeEnd}회 데이터 로딩`}
+                ? "로딩 중..."
+                : loadMode === "recent"
+                ? `최근 ${drawCount}회 데이터 로딩`
+                : `${rangeStart}회 ~ ${rangeEnd}회 데이터 로딩`}
             </button>
           </div>
         </div>
@@ -319,7 +371,9 @@ export default function ValidatePage() {
       {currentStep >= 1 && (
         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold text-gray-800">Step 1: 데이터 로딩 완료</h2>
+            <h2 className="text-xl font-bold text-gray-800">
+              Step 1: 데이터 로딩 완료
+            </h2>
             <button
               onClick={() => setCurrentStep(0)}
               className="text-sm text-blue-500 hover:text-blue-700 font-medium"
@@ -330,24 +384,35 @@ export default function ValidatePage() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
             <div className="bg-gray-50 p-3 rounded-lg">
               <div className="text-gray-500">총 회차</div>
-              <div className="text-lg font-bold text-gray-900">{draws.length}회</div>
+              <div className="text-lg font-bold text-gray-900">
+                {draws.length}회
+              </div>
             </div>
             <div className="bg-gray-50 p-3 rounded-lg">
               <div className="text-gray-500">최신 회차</div>
               <div className="text-lg font-bold text-gray-900">
-                {Math.max(draws[0]?.round || 0, draws[draws.length - 1]?.round || 0)}회
+                {Math.max(
+                  draws[0]?.round || 0,
+                  draws[draws.length - 1]?.round || 0
+                )}
+                회
               </div>
             </div>
             <div className="bg-gray-50 p-3 rounded-lg">
               <div className="text-gray-500">시작 회차</div>
               <div className="text-lg font-bold text-gray-900">
-                {Math.min(draws[0]?.round || 0, draws[draws.length - 1]?.round || 0)}회
+                {Math.min(
+                  draws[0]?.round || 0,
+                  draws[draws.length - 1]?.round || 0
+                )}
+                회
               </div>
             </div>
             <div className="bg-gray-50 p-3 rounded-lg">
               <div className="text-gray-500">기간</div>
               <div className="text-lg font-bold text-gray-900">
-                {draws[draws.length - 1]?.drawDate || '-'} ~ {draws[0]?.drawDate || '-'}
+                {draws[draws.length - 1]?.drawDate || "-"} ~{" "}
+                {draws[0]?.drawDate || "-"}
               </div>
             </div>
           </div>
@@ -372,15 +437,24 @@ export default function ValidatePage() {
             <table className="w-full text-sm border-collapse">
               <thead>
                 <tr className="bg-gray-100">
-                  <th className="border border-gray-300 px-3 py-2 text-center">순위</th>
+                  <th className="border border-gray-300 px-3 py-2 text-center">
+                    순위
+                  </th>
                   {RANGE_KEYS.map((key) => (
-                    <th key={key} className="border border-gray-300 px-3 py-2 text-center">
-                      <span className={`${RANGE_COLORS[key]} text-white px-2 py-0.5 rounded text-xs`}>
+                    <th
+                      key={key}
+                      className="border border-gray-300 px-3 py-2 text-center"
+                    >
+                      <span
+                        className={`${RANGE_COLORS[key]} text-white px-2 py-0.5 rounded text-xs`}
+                      >
                         {key}번대
                       </span>
                     </th>
                   ))}
-                  <th className="border border-gray-300 px-3 py-2 text-center">45</th>
+                  <th className="border border-gray-300 px-3 py-2 text-center">
+                    45
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -389,7 +463,13 @@ export default function ValidatePage() {
                   return (
                     <tr
                       key={row.rank}
-                      className={`${isHighlighted ? 'bg-yellow-50' : idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}
+                      className={`${
+                        isHighlighted
+                          ? "bg-yellow-50"
+                          : idx % 2 === 0
+                          ? "bg-white"
+                          : "bg-gray-50"
+                      }`}
                     >
                       <td className="border border-gray-300 px-3 py-1.5 text-center font-medium text-gray-600">
                         {row.rank}
@@ -397,11 +477,16 @@ export default function ValidatePage() {
                       {RANGE_KEYS.map((key) => {
                         const entry = row[key] as FrequencyEntry | null;
                         return (
-                          <td key={key} className="border border-gray-300 px-3 py-1.5 text-center">
+                          <td
+                            key={key}
+                            className="border border-gray-300 px-3 py-1.5 text-center"
+                          >
                             {entry ? (
                               <span className="inline-flex items-center gap-1">
                                 <LottoBall num={entry.number} />
-                                <span className="text-gray-500 text-xs">({entry.count})</span>
+                                <span className="text-gray-500 text-xs">
+                                  ({entry.count})
+                                </span>
                               </span>
                             ) : (
                               <span className="text-gray-300">-</span>
@@ -410,7 +495,7 @@ export default function ValidatePage() {
                         );
                       })}
                       <td className="border border-gray-300 px-3 py-1.5 text-center text-gray-600">
-                        {idx === 0 ? count45 : '-'}
+                        {idx === 0 ? count45 : "-"}
                       </td>
                     </tr>
                   );
@@ -442,7 +527,9 @@ export default function ValidatePage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
             {/* 최근 10주 출현 번호 */}
             <div className="bg-blue-50 rounded-lg p-4">
-              <h3 className="font-bold text-blue-800 mb-2">최근 10주 출현 번호</h3>
+              <h3 className="font-bold text-blue-800 mb-2">
+                최근 10주 출현 번호
+              </h3>
               <div className="flex flex-wrap gap-1.5">
                 {Array.from(recentNumbers)
                   .sort((a, b) => a - b)
@@ -450,12 +537,16 @@ export default function ValidatePage() {
                     <LottoBall key={num} num={num} />
                   ))}
               </div>
-              <p className="mt-2 text-xs text-blue-600">{recentNumbers.size}개 번호</p>
+              <p className="mt-2 text-xs text-blue-600">
+                {recentNumbers.size}개 번호
+              </p>
             </div>
 
             {/* 최근 2주 번호 (제외 대상) */}
             <div className="bg-red-50 rounded-lg p-4">
-              <h3 className="font-bold text-red-800 mb-2">최근 2주 번호 (제외)</h3>
+              <h3 className="font-bold text-red-800 mb-2">
+                최근 2주 번호 (제외)
+              </h3>
               <div className="flex flex-wrap gap-1.5">
                 {Array.from(excludedNumbers)
                   .sort((a, b) => a - b)
@@ -463,17 +554,23 @@ export default function ValidatePage() {
                     <LottoBall key={num} num={num} />
                   ))}
               </div>
-              <p className="mt-2 text-xs text-red-600">{excludedNumbers.size}개 번호 제외</p>
+              <p className="mt-2 text-xs text-red-600">
+                {excludedNumbers.size}개 번호 제외
+              </p>
             </div>
           </div>
 
           {/* 범대별 최종 후보 */}
           <div className="bg-green-50 rounded-lg p-4">
-            <h3 className="font-bold text-green-800 mb-3">최종 후보 번호 (범대별)</h3>
+            <h3 className="font-bold text-green-800 mb-3">
+              최종 후보 번호 (범대별)
+            </h3>
             <div className="space-y-2">
               {RANGE_KEYS.map((key) => (
                 <div key={key} className="flex items-center gap-3">
-                  <span className={`${RANGE_COLORS[key]} text-white px-2 py-0.5 rounded text-xs font-bold w-14 text-center`}>
+                  <span
+                    className={`${RANGE_COLORS[key]} text-white px-2 py-0.5 rounded text-xs font-bold w-14 text-center`}
+                  >
                     {key}번대
                   </span>
                   <div className="flex flex-wrap gap-1.5">
@@ -485,7 +582,9 @@ export default function ValidatePage() {
                       <span className="text-gray-400 text-sm">없음</span>
                     )}
                   </div>
-                  <span className="text-xs text-gray-500">({candidates[key].length}개)</span>
+                  <span className="text-xs text-gray-500">
+                    ({candidates[key].length}개)
+                  </span>
                 </div>
               ))}
             </div>
@@ -508,10 +607,10 @@ export default function ValidatePage() {
               className="mt-4 px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-bold disabled:bg-gray-400"
             >
               {loading
-                ? '조합 생성 중...'
+                ? "조합 생성 중..."
                 : allCandidates.length < 6
-                  ? '후보 번호가 6개 미만입니다'
-                  : `다음: ${allCandidates.length}개 번호로 조합 생성`}
+                ? "후보 번호가 6개 미만입니다"
+                : `다음: ${allCandidates.length}개 번호로 조합 생성`}
             </button>
           )}
         </div>
@@ -531,7 +630,8 @@ export default function ValidatePage() {
                 {filterStats.before.toLocaleString()}개
               </div>
               <div className="text-xs text-blue-500">
-                C({Math.min(allCandidates.length, 15)},6) x {Math.ceil(allCandidates.length / 15)} 그룹
+                C({Math.min(allCandidates.length, 15)},6) x{" "}
+                {Math.ceil(allCandidates.length / 15)} 그룹
               </div>
             </div>
             <div className="bg-red-50 rounded-lg p-4 text-center">
@@ -539,7 +639,9 @@ export default function ValidatePage() {
               <div className="text-2xl font-bold text-red-800">
                 {filterStats.excluded.toLocaleString()}개
               </div>
-              <div className="text-xs text-red-500">과거 100회와 3개 이상 일치</div>
+              <div className="text-xs text-red-500">
+                과거 100회와 3개 이상 일치
+              </div>
             </div>
             <div className="bg-green-50 rounded-lg p-4 text-center">
               <div className="text-sm text-green-600">최종 조합 수</div>
@@ -547,9 +649,13 @@ export default function ValidatePage() {
                 {filterStats.after.toLocaleString()}개
               </div>
               <div className="text-xs text-green-500">
-                필터율: {filterStats.before > 0
-                  ? ((filterStats.excluded / filterStats.before) * 100).toFixed(1)
-                  : 0}%
+                필터율:{" "}
+                {filterStats.before > 0
+                  ? ((filterStats.excluded / filterStats.before) * 100).toFixed(
+                      1
+                    )
+                  : 0}
+                %
               </div>
             </div>
           </div>
@@ -561,8 +667,13 @@ export default function ValidatePage() {
             </h3>
             <div className="space-y-2 max-h-80 overflow-y-auto">
               {filteredCombos.slice(0, 20).map((combo, idx) => (
-                <div key={idx} className="flex items-center gap-2 bg-white p-2 rounded">
-                  <span className="text-xs text-gray-400 w-8 text-right">#{idx + 1}</span>
+                <div
+                  key={idx}
+                  className="flex items-center gap-2 bg-white p-2 rounded"
+                >
+                  <span className="text-xs text-gray-400 w-8 text-right">
+                    #{idx + 1}
+                  </span>
                   <div className="flex gap-1.5">
                     {combo.map((num) => (
                       <LottoBall key={num} num={num} size="md" />
@@ -584,7 +695,7 @@ export default function ValidatePage() {
               disabled={loading || filteredCombos.length === 0}
               className="mt-4 px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-bold disabled:bg-gray-400"
             >
-              {loading ? '그룹핑 중...' : '다음: 그룹핑 분석'}
+              {loading ? "그룹핑 중..." : "다음: 그룹핑 분석"}
             </button>
           )}
         </div>
@@ -603,14 +714,18 @@ export default function ValidatePage() {
               <span className="bg-purple-100 text-purple-800 px-2 py-0.5 rounded text-sm">
                 5개 번호 공유 그룹
               </span>
-              <span className="text-sm text-gray-500">{groups5.length}개 그룹</span>
+              <span className="text-sm text-gray-500">
+                {groups5.length}개 그룹
+              </span>
             </h3>
             {groups5.length > 0 ? (
               <div className="space-y-4 max-h-96 overflow-y-auto">
                 {groups5.map((group, gIdx) => (
                   <div key={gIdx} className="bg-purple-50 rounded-lg p-4">
                     <div className="mb-2">
-                      <span className="text-xs text-purple-600 font-medium">공유 번호:</span>
+                      <span className="text-xs text-purple-600 font-medium">
+                        공유 번호:
+                      </span>
                       <div className="flex gap-1.5 mt-1">
                         {group.sharedNumbers.map((num) => (
                           <LottoBall key={num} num={num} size="md" />
@@ -619,7 +734,10 @@ export default function ValidatePage() {
                     </div>
                     <div className="space-y-1">
                       {group.combinations.map((combo, cIdx) => (
-                        <div key={cIdx} className="flex items-center gap-2 bg-white p-2 rounded">
+                        <div
+                          key={cIdx}
+                          className="flex items-center gap-2 bg-white p-2 rounded"
+                        >
                           <div className="flex gap-1.5">
                             {combo.numbers.map((num) => (
                               <LottoBall key={num} num={num} />
@@ -628,12 +746,16 @@ export default function ValidatePage() {
                         </div>
                       ))}
                     </div>
-                    <span className="text-xs text-purple-500">{group.combinations.length}개 조합</span>
+                    <span className="text-xs text-purple-500">
+                      {group.combinations.length}개 조합
+                    </span>
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="text-gray-400 text-sm">5개 번호를 공유하는 그룹이 없습니다.</p>
+              <p className="text-gray-400 text-sm">
+                5개 번호를 공유하는 그룹이 없습니다.
+              </p>
             )}
           </div>
 
@@ -643,14 +765,18 @@ export default function ValidatePage() {
               <span className="bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded text-sm">
                 4개 번호 공유 그룹
               </span>
-              <span className="text-sm text-gray-500">{groups4.length}개 그룹</span>
+              <span className="text-sm text-gray-500">
+                {groups4.length}개 그룹
+              </span>
             </h3>
             {groups4.length > 0 ? (
               <div className="space-y-4 max-h-96 overflow-y-auto">
                 {groups4.slice(0, 30).map((group, gIdx) => (
                   <div key={gIdx} className="bg-indigo-50 rounded-lg p-4">
                     <div className="mb-2">
-                      <span className="text-xs text-indigo-600 font-medium">공유 번호:</span>
+                      <span className="text-xs text-indigo-600 font-medium">
+                        공유 번호:
+                      </span>
                       <div className="flex gap-1.5 mt-1">
                         {group.sharedNumbers.map((num) => (
                           <LottoBall key={num} num={num} size="md" />
@@ -659,7 +785,10 @@ export default function ValidatePage() {
                     </div>
                     <div className="space-y-1">
                       {group.combinations.map((combo, cIdx) => (
-                        <div key={cIdx} className="flex items-center gap-2 bg-white p-2 rounded">
+                        <div
+                          key={cIdx}
+                          className="flex items-center gap-2 bg-white p-2 rounded"
+                        >
                           <div className="flex gap-1.5">
                             {combo.numbers.map((num) => (
                               <LottoBall key={num} num={num} />
@@ -668,7 +797,9 @@ export default function ValidatePage() {
                         </div>
                       ))}
                     </div>
-                    <span className="text-xs text-indigo-500">{group.combinations.length}개 조합</span>
+                    <span className="text-xs text-indigo-500">
+                      {group.combinations.length}개 조합
+                    </span>
                   </div>
                 ))}
                 {groups4.length > 30 && (
@@ -678,7 +809,9 @@ export default function ValidatePage() {
                 )}
               </div>
             ) : (
-              <p className="text-gray-400 text-sm">4개 번호를 공유하는 그룹이 없습니다.</p>
+              <p className="text-gray-400 text-sm">
+                4개 번호를 공유하는 그룹이 없습니다.
+              </p>
             )}
           </div>
 
@@ -688,19 +821,27 @@ export default function ValidatePage() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
               <div>
                 <span className="text-gray-500">분석 데이터</span>
-                <div className="font-bold">{draws.length}회차</div>
+                <div className="font-bold text-gray-500">
+                  {draws.length}회차
+                </div>
               </div>
               <div>
                 <span className="text-gray-500">후보 번호</span>
-                <div className="font-bold">{allCandidates.length}개</div>
+                <div className="font-bold text-gray-500">
+                  {allCandidates.length}개
+                </div>
               </div>
               <div>
                 <span className="text-gray-500">최종 조합</span>
-                <div className="font-bold">{filterStats.after.toLocaleString()}개</div>
+                <div className="font-bold text-gray-500">
+                  {filterStats.after.toLocaleString()}개
+                </div>
               </div>
               <div>
                 <span className="text-gray-500">그룹 (5개/4개)</span>
-                <div className="font-bold">{groups5.length} / {groups4.length}</div>
+                <div className="font-bold text-gray-500">
+                  {groups5.length} / {groups4.length}
+                </div>
               </div>
             </div>
           </div>
