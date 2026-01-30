@@ -457,6 +457,86 @@ function getRangeDistribution(numbers: LottoNumber[]) {
 }
 
 /**
+ * 조합에 확률 점수를 매기고 상위 조합을 반환
+ *
+ * 점수 기준:
+ * 1. 빈도 점수 (40%): 각 번호의 출현 빈도 합산
+ * 2. 범대 균형 (20%): 5개 범대에 골고루 분포할수록 높은 점수
+ * 3. 합계 범위 (20%): 6개 번호 합이 100~175 사이일 때 최고 점수
+ * 4. 홀짝 균형 (20%): 홀짝 비율이 3:3 또는 2:4일 때 높은 점수
+ */
+export interface ScoredCombination {
+  numbers: LottoNumber[];
+  score: number;
+  details: {
+    frequencyScore: number;
+    balanceScore: number;
+    sumScore: number;
+    oddEvenScore: number;
+  };
+}
+
+export function scoreCombinations(
+  combos: LottoNumber[][],
+  draws: LottoDrawResult[],
+  topN: number = 30,
+): ScoredCombination[] {
+  // 1. 번호별 출현 빈도 계산
+  const freqMap: Record<number, number> = {};
+  for (let i = 1; i <= 45; i++) freqMap[i] = 0;
+  for (const draw of draws) {
+    for (const num of draw.numbers) {
+      freqMap[num] = (freqMap[num] || 0) + 1;
+    }
+  }
+  const maxFreq = Math.max(...Object.values(freqMap));
+
+  const scored: ScoredCombination[] = combos.map((combo) => {
+    // 빈도 점수: 각 번호의 빈도를 정규화해서 합산 (0~100)
+    const freqSum = combo.reduce((sum, num) => sum + freqMap[num], 0);
+    const frequencyScore = (freqSum / (maxFreq * 6)) * 100;
+
+    // 범대 균형 점수: 사용된 범대 수가 많을수록 높은 점수 (0~100)
+    const dist = { '단': 0, '십': 0, '이': 0, '삼': 0, '사': 0 };
+    for (const num of combo) {
+      const range = getNumberRange(num);
+      dist[range]++;
+    }
+    const usedRanges = Object.values(dist).filter((v) => v > 0).length;
+    const maxInRange = Math.max(...Object.values(dist));
+    // 4~5개 범대 사용 & 한 범대에 3개 이상 몰리지 않으면 좋음
+    const balanceScore = (usedRanges / 5) * 60 + (maxInRange <= 2 ? 40 : maxInRange <= 3 ? 20 : 0);
+
+    // 합계 점수: 합이 100~175 사이면 최고, 벗어나면 감점 (0~100)
+    const total = combo.reduce((s, n) => s + n, 0);
+    let sumScore = 100;
+    if (total < 100) sumScore = Math.max(0, 100 - (100 - total) * 2);
+    else if (total > 175) sumScore = Math.max(0, 100 - (total - 175) * 2);
+
+    // 홀짝 균형 점수 (0~100)
+    const oddCount = combo.filter((n) => n % 2 === 1).length;
+    const evenCount = 6 - oddCount;
+    const diff = Math.abs(oddCount - evenCount);
+    const oddEvenScore = diff === 0 ? 100 : diff === 2 ? 80 : diff === 4 ? 40 : 10;
+
+    const score =
+      frequencyScore * 0.4 +
+      balanceScore * 0.2 +
+      sumScore * 0.2 +
+      oddEvenScore * 0.2;
+
+    return {
+      numbers: combo,
+      score,
+      details: { frequencyScore, balanceScore, sumScore, oddEvenScore },
+    };
+  });
+
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, topN);
+}
+
+/**
  * LottoNumber[]를 LottoCombination으로 변환
  */
 export function toCombination(numbers: LottoNumber[], id: string): LottoCombination {

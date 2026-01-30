@@ -21,8 +21,10 @@ import {
   filterByHistoricalMatch,
   groupBySharedNumbers,
   groupByExactSharedCount,
+  scoreCombinations,
   getNumberRange,
 } from "@/lib/combination-generator";
+import type { ScoredCombination } from "@/lib/combination-generator";
 
 type RangeKey = "단" | "십" | "이" | "삼" | "사";
 const RANGE_KEYS: RangeKey[] = ["단", "십", "이", "삼", "사"];
@@ -101,6 +103,9 @@ export default function ValidatePage() {
   const [groups5, setGroups5] = useState<CombinationGroup[]>([]);
   const [groups4, setGroups4] = useState<CombinationGroup[]>([]);
   const [groups3, setGroups3] = useState<CombinationGroup[]>([]);
+
+  // 확률 점수 결과
+  const [topCombos, setTopCombos] = useState<ScoredCombination[]>([]);
 
   // Step 1: 데이터 로딩
   const handleLoadData = useCallback(async () => {
@@ -210,6 +215,23 @@ export default function ValidatePage() {
     }, 50);
   }, [filteredCombos]);
 
+  // Step 8: 확률 점수 분석
+  const handleScoreCombinations = useCallback(() => {
+    setLoading(true);
+    setTimeout(() => {
+      try {
+        const scored = scoreCombinations(filteredCombos, draws, 30);
+        setTopCombos(scored);
+        setCurrentStep(7);
+      } catch (err) {
+        setError("확률 분석 중 오류가 발생했습니다.");
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    }, 50);
+  }, [filteredCombos, draws]);
+
   const steps = [
     { label: "데이터 로딩", description: "최근 100주 당첨 데이터" },
     { label: "빈도순 정리표", description: "100주간 번호 출현 빈도" },
@@ -218,6 +240,7 @@ export default function ValidatePage() {
     { label: "과거 비교", description: "과거 데이터와 비교 필터링" },
     { label: "그룹핑 결과", description: "최종 추천 조합" },
     { label: "3개 공유 조합", description: "3개만 같은 다양한 조합" },
+    { label: "확률 분석", description: "확률 기반 최종 추천" },
   ];
 
   return (
@@ -916,6 +939,114 @@ export default function ValidatePage() {
             </p>
           )}
 
+          {currentStep === 6 && (
+            <button
+              onClick={handleScoreCombinations}
+              disabled={loading || filteredCombos.length === 0}
+              className="mt-4 px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-bold disabled:bg-gray-400"
+            >
+              {loading ? "분석 중..." : "다음: 확률 기반 최종 추천"}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Step 8: 확률 분석 최종 추천 */}
+      {currentStep >= 7 && (
+        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+          <h2 className="text-xl font-bold text-gray-800 mb-4">
+            Step 8: 확률 기반 최종 추천
+          </h2>
+          <p className="text-sm text-gray-500 mb-4">
+            빈도(40%) + 범대균형(20%) + 합계범위(20%) + 홀짝균형(20%) 기준으로 점수를 매겨 상위 30개 조합을 추천합니다.
+          </p>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+            <div className="bg-orange-50 rounded-lg p-3 text-center">
+              <div className="text-xs text-orange-600">빈도 점수</div>
+              <div className="text-sm font-bold text-orange-800">40%</div>
+              <div className="text-xs text-orange-500">출현 빈도 높은 번호</div>
+            </div>
+            <div className="bg-blue-50 rounded-lg p-3 text-center">
+              <div className="text-xs text-blue-600">범대 균형</div>
+              <div className="text-sm font-bold text-blue-800">20%</div>
+              <div className="text-xs text-blue-500">다양한 범대 분포</div>
+            </div>
+            <div className="bg-green-50 rounded-lg p-3 text-center">
+              <div className="text-xs text-green-600">합계 범위</div>
+              <div className="text-sm font-bold text-green-800">20%</div>
+              <div className="text-xs text-green-500">합계 100~175 최적</div>
+            </div>
+            <div className="bg-purple-50 rounded-lg p-3 text-center">
+              <div className="text-xs text-purple-600">홀짝 균형</div>
+              <div className="text-sm font-bold text-purple-800">20%</div>
+              <div className="text-xs text-purple-500">홀짝 3:3 최적</div>
+            </div>
+          </div>
+
+          {topCombos.length > 0 ? (
+            <div className="space-y-3">
+              {topCombos.map((item, idx) => {
+                const oddCount = item.numbers.filter((n) => n % 2 === 1).length;
+                const total = item.numbers.reduce((s, n) => s + n, 0);
+                return (
+                  <div
+                    key={idx}
+                    className={`rounded-lg p-4 ${
+                      idx < 5
+                        ? "bg-gradient-to-r from-yellow-50 to-orange-50 border border-yellow-200"
+                        : idx < 10
+                        ? "bg-gray-50"
+                        : "bg-white border border-gray-100"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span
+                        className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                          idx < 5
+                            ? "bg-yellow-500 text-white"
+                            : idx < 10
+                            ? "bg-gray-400 text-white"
+                            : "bg-gray-200 text-gray-600"
+                        }`}
+                      >
+                        {idx + 1}
+                      </span>
+                      <div className="flex gap-1.5">
+                        {item.numbers.map((num) => (
+                          <LottoBall key={num} num={num} size="md" />
+                        ))}
+                      </div>
+                      <div className="ml-auto flex items-center gap-4">
+                        <span className="text-lg font-bold text-orange-600">
+                          {item.score.toFixed(1)}점
+                        </span>
+                      </div>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                      <span className="bg-orange-100 text-orange-700 px-2 py-0.5 rounded">
+                        빈도 {item.details.frequencyScore.toFixed(0)}
+                      </span>
+                      <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
+                        균형 {item.details.balanceScore.toFixed(0)}
+                      </span>
+                      <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded">
+                        합계 {total} ({item.details.sumScore.toFixed(0)})
+                      </span>
+                      <span className="bg-purple-100 text-purple-700 px-2 py-0.5 rounded">
+                        홀{oddCount}:짝{6 - oddCount} ({item.details.oddEvenScore.toFixed(0)})
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-gray-400 text-sm">
+              추천 조합이 없습니다.
+            </p>
+          )}
+
           {/* 최종 요약 */}
           <div className="mt-6 bg-gradient-to-r from-blue-50 to-green-50 rounded-lg p-4">
             <h3 className="font-bold text-gray-800 mb-2">최종 요약</h3>
@@ -939,15 +1070,15 @@ export default function ValidatePage() {
                 </div>
               </div>
               <div>
-                <span className="text-gray-500">그룹 (5개/4개)</span>
+                <span className="text-gray-500">그룹 (5/4/3)</span>
                 <div className="font-bold text-gray-500">
-                  {groups5.length} / {groups4.length}
+                  {groups5.length} / {groups4.length} / {groups3.length}
                 </div>
               </div>
               <div>
-                <span className="text-gray-500">3개 공유 그룹</span>
-                <div className="font-bold text-gray-500">
-                  {groups3.length}개
+                <span className="text-gray-500">추천 TOP</span>
+                <div className="font-bold text-orange-600">
+                  {topCombos.length}개
                 </div>
               </div>
             </div>
@@ -974,6 +1105,7 @@ export default function ValidatePage() {
               setGroups5([]);
               setGroups4([]);
               setGroups3([]);
+              setTopCombos([]);
               setError(null);
             }}
             className="px-6 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
