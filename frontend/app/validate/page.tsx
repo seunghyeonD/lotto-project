@@ -6,6 +6,7 @@
 "use client";
 
 import React, { useState, useCallback } from "react";
+import * as XLSX from "xlsx";
 import { lottoApi } from "@/lib/api";
 import {
   LottoNumber as LottoNumberType,
@@ -231,6 +232,51 @@ export default function ValidatePage() {
       }
     }, 50);
   }, [filteredCombos, draws]);
+
+  // 엑셀 내보내기
+  const handleExportExcel = useCallback(() => {
+    if (topCombos.length === 0) return;
+
+    const rows = topCombos.map((item, idx) => {
+      const oddCount = item.numbers.filter((n) => n % 2 === 1).length;
+      const total = item.numbers.reduce((s, n) => s + n, 0);
+      return {
+        순위: idx + 1,
+        번호1: item.numbers[0],
+        번호2: item.numbers[1],
+        번호3: item.numbers[2],
+        번호4: item.numbers[3],
+        번호5: item.numbers[4],
+        번호6: item.numbers[5],
+        총점: Number(item.score.toFixed(1)),
+        빈도점수: Number(item.details.frequencyScore.toFixed(1)),
+        균형점수: Number(item.details.balanceScore.toFixed(1)),
+        합계: total,
+        합계점수: Number(item.details.sumScore.toFixed(1)),
+        "홀:짝": `${oddCount}:${6 - oddCount}`,
+        홀짝점수: Number(item.details.oddEvenScore.toFixed(1)),
+      };
+    });
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+
+    // 컬럼 너비 설정
+    ws["!cols"] = [
+      { wch: 5 },  // 순위
+      { wch: 6 }, { wch: 6 }, { wch: 6 }, { wch: 6 }, { wch: 6 }, { wch: 6 }, // 번호1~6
+      { wch: 7 },  // 총점
+      { wch: 8 },  // 빈도점수
+      { wch: 8 },  // 균형점수
+      { wch: 6 },  // 합계
+      { wch: 8 },  // 합계점수
+      { wch: 6 },  // 홀:짝
+      { wch: 8 },  // 홀짝점수
+    ];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "추천 조합");
+    XLSX.writeFile(wb, `로또_추천조합_TOP${topCombos.length}.xlsx`);
+  }, [topCombos]);
 
   const steps = [
     { label: "데이터 로딩", description: "최근 100주 당첨 데이터" },
@@ -1045,6 +1091,21 @@ export default function ValidatePage() {
             <p className="text-gray-400 text-sm">
               추천 조합이 없습니다.
             </p>
+          )}
+
+          {/* 엑셀 내보내기 */}
+          {topCombos.length > 0 && (
+            <div className="mt-4 flex justify-end">
+              <button
+                onClick={handleExportExcel}
+                className="flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-bold"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                엑셀로 내보내기
+              </button>
+            </div>
           )}
 
           {/* 최종 요약 */}
