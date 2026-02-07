@@ -6,7 +6,7 @@
 "use client";
 
 import React, { useState, useCallback } from "react";
-import * as XLSX from "xlsx";
+import * as XLSX from "xlsx-js-style";
 import { lottoApi } from "@/lib/api";
 import {
   LottoNumber as LottoNumberType,
@@ -309,6 +309,7 @@ export default function ValidatePage() {
     const ws = XLSX.utils.json_to_sheet(rows);
 
     // 컬럼 너비 설정
+    const colCount = 19;
     ws["!cols"] = [
       { wch: 5 },  // 순위
       { wch: 6 }, { wch: 6 }, { wch: 6 }, { wch: 6 }, { wch: 6 }, { wch: 6 }, // 번호1~6
@@ -325,6 +326,48 @@ export default function ValidatePage() {
       { wch: 7 },  // 연속
       { wch: 7 },  // 끝수
     ];
+
+    // 공통 테두리 스타일
+    const thinBorder = {
+      top: { style: "thin" as const, color: { rgb: "000000" } },
+      bottom: { style: "thin" as const, color: { rgb: "000000" } },
+      left: { style: "thin" as const, color: { rgb: "000000" } },
+      right: { style: "thin" as const, color: { rgb: "000000" } },
+    };
+
+    const rowCount = topCombos.length + 1; // 헤더 + 데이터
+
+    for (let r = 0; r < rowCount; r++) {
+      for (let c = 0; c < colCount; c++) {
+        const cellRef = XLSX.utils.encode_cell({ r, c });
+        const cell = ws[cellRef];
+        if (!cell) continue;
+
+        // 기본 스타일: 테두리 + 가운데 정렬 + 굵게
+        cell.s = {
+          border: thinBorder,
+          alignment: { horizontal: "center", vertical: "center" },
+          font: { bold: true, sz: 11 },
+        };
+
+        // 헤더 행: 주황 배경 + 검정 글자
+        if (r === 0) {
+          cell.s = {
+            ...cell.s,
+            fill: { fgColor: { rgb: "FF8C00" } },
+            font: { bold: true, sz: 11, color: { rgb: "000000" } },
+          };
+        }
+
+        // 순위 컬럼(A열, c===0) 데이터 행: 노란 배경
+        if (r > 0 && c === 0) {
+          cell.s = {
+            ...cell.s,
+            fill: { fgColor: { rgb: "FFFF00" } },
+          };
+        }
+      }
+    }
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "추천 조합");
