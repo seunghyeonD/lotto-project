@@ -215,14 +215,28 @@ export default function ValidatePage() {
     }
   }, [filteredCombos]);
 
+  // 연산용 조합 제한 (너무 많으면 브라우저 멈춤 방지)
+  const MAX_COMBOS = 3000;
+  const getLimitedCombos = useCallback((combos: LottoNumberType[][]) => {
+    if (combos.length <= MAX_COMBOS) return combos;
+    // 균등 간격 샘플링 (편향 방지)
+    const step = combos.length / MAX_COMBOS;
+    const sampled: LottoNumberType[][] = [];
+    for (let i = 0; i < MAX_COMBOS; i++) {
+      sampled.push(combos[Math.floor(i * step)]);
+    }
+    return sampled;
+  }, []);
+
   // Step 7: 3개 공유 그룹핑
   const handleGroup3Combinations = useCallback(async () => {
     setLoading(true);
     setProgress(0);
     setProgressLabel("3개 공유 그룹 분석 중...");
     try {
+      const combos = getLimitedCombos(filteredCombos);
       const g3 = await groupByExactSharedCountAsync(
-        filteredCombos,
+        combos,
         3,
         (p) => setProgress(p)
       );
@@ -236,7 +250,7 @@ export default function ValidatePage() {
       setProgress(0);
       setProgressLabel("");
     }
-  }, [filteredCombos]);
+  }, [filteredCombos, getLimitedCombos]);
 
   // Step 8: 확률 점수 분석
   const handleScoreCombinations = useCallback(async () => {

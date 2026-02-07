@@ -581,12 +581,22 @@ export function groupByExactSharedCount(
     }
 
     const sharedSet = new Set(sharedNumbers);
-    const validCombos: LottoNumber[][] = [];
+    const candidatesInGroup: LottoNumber[][] = [];
     for (const idx of indices) {
       const combo = combos[idx];
       let overlap = 0;
       for (const n of combo) { if (sharedSet.has(n)) overlap++; }
-      if (overlap === exactCount) validCombos.push(combo);
+      if (overlap === exactCount) candidatesInGroup.push(combo);
+    }
+
+    // 그룹 내 모든 조합이 정확히 exactCount개만 공유하도록 그리디 필터
+    const validCombos: LottoNumber[][] = [];
+    for (const cand of candidatesInGroup) {
+      let fits = true;
+      for (const sel of validCombos) {
+        if (countSharedNumbers(cand, sel) !== exactCount) { fits = false; break; }
+      }
+      if (fits) validCombos.push(cand);
     }
 
     if (validCombos.length >= 2) {
@@ -713,8 +723,8 @@ export async function groupByExactSharedCountAsync(
 
     const sharedSet = new Set(sharedNumbers);
 
-    // 정확히 exactCount개만 공유하는 조합 필터
-    const validCombos: LottoNumber[][] = [];
+    // 1차: 키 번호를 정확히 exactCount개 포함하는 조합만
+    const candidatesInGroup: LottoNumber[][] = [];
     for (const idx of indices) {
       const combo = combos[idx];
       let overlap = 0;
@@ -722,8 +732,18 @@ export async function groupByExactSharedCountAsync(
         if (sharedSet.has(n)) overlap++;
       }
       if (overlap === exactCount) {
-        validCombos.push(combo);
+        candidatesInGroup.push(combo);
       }
+    }
+
+    // 2차: 그룹 내 조합끼리 정확히 exactCount개만 공유 (그리디)
+    const validCombos: LottoNumber[][] = [];
+    for (const cand of candidatesInGroup) {
+      let fits = true;
+      for (const sel of validCombos) {
+        if (countSharedNumbers(cand, sel) !== exactCount) { fits = false; break; }
+      }
+      if (fits) validCombos.push(cand);
     }
 
     if (validCombos.length >= 2) {
@@ -998,10 +1018,13 @@ function scoreOneCombo(c: LottoNumber[], ctx: ScoringContext): ScoredCombination
     if (ctx.lastDrawSet.has(c[j])) carry1++;
     if (ctx.secondLastDrawSet.has(c[j])) carry2++;
   }
+  // 이월 패턴: 직전 회차 1개 + 2번째 전 1개가 가장 이상적
   let carryoverScore: number;
-  if (carry1 === 1) carryoverScore = 100;
-  else if (carry1 === 2) carryoverScore = 75;
-  else if (carry1 === 0 && carry2 >= 1) carryoverScore = 55;
+  if (carry1 === 1 && carry2 >= 1) carryoverScore = 100;
+  else if (carry1 === 1) carryoverScore = 90;
+  else if (carry1 === 2 && carry2 === 0) carryoverScore = 75;
+  else if (carry1 === 2 && carry2 >= 1) carryoverScore = 70;
+  else if (carry1 === 0 && carry2 >= 1) carryoverScore = 60;
   else if (carry1 === 0) carryoverScore = 30;
   else carryoverScore = 15; // 3개 이상
 
@@ -1020,7 +1043,15 @@ function scoreOneCombo(c: LottoNumber[], ctx: ScoringContext): ScoredCombination
     if (ranges[j] > 0) usedRanges++;
     if (ranges[j] > maxInRange) maxInRange = ranges[j];
   }
-  const balanceScore = (usedRanges / 5) * 60 + (maxInRange <= 2 ? 40 : maxInRange <= 3 ? 20 : 0);
+  // 실제 로또 당첨 패턴: 3~4개 범대 분포가 가장 흔함
+  let balanceScore: number;
+  if (usedRanges >= 4 && maxInRange <= 2) balanceScore = 100;
+  else if (usedRanges >= 3 && maxInRange <= 2) balanceScore = 95;
+  else if (usedRanges === 5 && maxInRange <= 3) balanceScore = 85;
+  else if (usedRanges >= 4 && maxInRange <= 3) balanceScore = 80;
+  else if (usedRanges >= 3 && maxInRange <= 3) balanceScore = 70;
+  else if (usedRanges >= 2 && maxInRange <= 3) balanceScore = 50;
+  else balanceScore = 20;
 
   // === 6. 합계 범위 점수 (10%) - 실제 당첨 합계 분포 반영: 100~175 최적 ===
   let sumScore: number;
@@ -1135,8 +1166,8 @@ export function scoreCombinations(
   }
 
   scored.sort((a, b) => b.score - a.score);
-  // 후보 풀에서 다양성 기반 선택 (최대 3개까지 번호 겹침 허용)
-  return selectDiverse(scored.slice(0, topN * 5), topN, 3);
+  // 후보 풀에서 다양성 기반 선택 (최대 2개까지 번호 겹침 허용)
+  return selectDiverse(scored.slice(0, topN * 10), topN, 2);
 }
 
 /**
@@ -1153,8 +1184,8 @@ export async function scoreCombinationsAsync(
   const ctx = buildScoringContext(draws);
   const total = combos.length;
 
-  // 후보 풀: topN의 5배를 모아서 다양성 필터링에 사용
-  const poolSize = topN * 5;
+  // 후보 풀: topN의 10배를 모아서 다양성 필터링에 사용
+  const poolSize = topN * 10;
   const heap: ScoredCombination[] = [];
   let heapMin = -Infinity;
 
@@ -1183,8 +1214,8 @@ export async function scoreCombinationsAsync(
   onProgress?.(100);
   heap.sort((a, b) => b.score - a.score);
 
-  // 다양성 기반 선택: 서로 최대 3개까지만 번호 겹침 허용
-  return selectDiverse(heap, topN, 3);
+  // 다양성 기반 선택: 서로 최대 2개까지만 번호 겹침 허용
+  return selectDiverse(heap, topN, 2);
 }
 
 /**
