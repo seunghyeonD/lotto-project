@@ -20,9 +20,9 @@ import {
   filterCandidateNumbers,
   splitAndCombine,
   filterByHistoricalMatch,
-  groupBySharedNumbers,
-  groupByExactSharedCount,
-  scoreCombinations,
+  groupBySharedNumbersAsync,
+  groupByExactSharedCountAsync,
+  scoreCombinationsAsync,
   getNumberRange,
 } from "@/lib/combination-generator";
 import type { ScoredCombination } from "@/lib/combination-generator";
@@ -108,6 +108,10 @@ export default function ValidatePage() {
   // 확률 점수 결과
   const [topCombos, setTopCombos] = useState<ScoredCombination[]>([]);
 
+  // 진행률 상태
+  const [progress, setProgress] = useState(0);
+  const [progressLabel, setProgressLabel] = useState("");
+
   // Step 1: 데이터 로딩
   const handleLoadData = useCallback(async () => {
     try {
@@ -161,8 +165,8 @@ export default function ValidatePage() {
         const combos = splitAndCombine(allCandidates, 15);
         setGeneratedCombos(combos);
 
-        // 과거 100회와 비교하여 3개 이상 일치 제외
-        const result = filterByHistoricalMatch(combos, draws, 3);
+        // 과거 100회와 비교하여 4개 이상 일치 제외 (완화된 필터)
+        const result = filterByHistoricalMatch(combos, draws, 4);
         setFilteredCombos(result.filtered);
         setFilterStats({
           before: result.beforeCount,
@@ -181,56 +185,81 @@ export default function ValidatePage() {
   }, [allCandidates, draws]);
 
   // Step 6: 그룹핑
-  const handleGroupCombinations = useCallback(() => {
+  const handleGroupCombinations = useCallback(async () => {
     setLoading(true);
-    setTimeout(() => {
-      try {
-        const g5 = groupBySharedNumbers(filteredCombos, 5);
-        const g4 = groupBySharedNumbers(filteredCombos, 4);
-        setGroups5(g5);
-        setGroups4(g4);
-        setCurrentStep(5);
-      } catch (err) {
-        setError("그룹핑 중 오류가 발생했습니다.");
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    }, 50);
+    setProgress(0);
+    setProgressLabel("5개 공유 그룹 분석 중...");
+    try {
+      const g5 = await groupBySharedNumbersAsync(
+        filteredCombos,
+        5,
+        (p) => setProgress(Math.round(p * 0.5))
+      );
+      setGroups5(g5);
+
+      setProgressLabel("4개 공유 그룹 분석 중...");
+      const g4 = await groupBySharedNumbersAsync(
+        filteredCombos,
+        4,
+        (p) => setProgress(50 + Math.round(p * 0.5))
+      );
+      setGroups4(g4);
+      setCurrentStep(5);
+    } catch (err) {
+      setError("그룹핑 중 오류가 발생했습니다.");
+      console.error(err);
+    } finally {
+      setLoading(false);
+      setProgress(0);
+      setProgressLabel("");
+    }
   }, [filteredCombos]);
 
   // Step 7: 3개 공유 그룹핑
-  const handleGroup3Combinations = useCallback(() => {
+  const handleGroup3Combinations = useCallback(async () => {
     setLoading(true);
-    setTimeout(() => {
-      try {
-        const g3 = groupByExactSharedCount(filteredCombos, 3);
-        setGroups3(g3);
-        setCurrentStep(6);
-      } catch (err) {
-        setError("3개 공유 그룹핑 중 오류가 발생했습니다.");
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    }, 50);
+    setProgress(0);
+    setProgressLabel("3개 공유 그룹 분석 중...");
+    try {
+      const g3 = await groupByExactSharedCountAsync(
+        filteredCombos,
+        3,
+        (p) => setProgress(p)
+      );
+      setGroups3(g3);
+      setCurrentStep(6);
+    } catch (err) {
+      setError("3개 공유 그룹핑 중 오류가 발생했습니다.");
+      console.error(err);
+    } finally {
+      setLoading(false);
+      setProgress(0);
+      setProgressLabel("");
+    }
   }, [filteredCombos]);
 
   // Step 8: 확률 점수 분석
-  const handleScoreCombinations = useCallback(() => {
+  const handleScoreCombinations = useCallback(async () => {
     setLoading(true);
-    setTimeout(() => {
-      try {
-        const scored = scoreCombinations(filteredCombos, draws, 30);
-        setTopCombos(scored);
-        setCurrentStep(7);
-      } catch (err) {
-        setError("확률 분석 중 오류가 발생했습니다.");
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    }, 50);
+    setProgress(0);
+    setProgressLabel("확률 점수 계산 중...");
+    try {
+      const scored = await scoreCombinationsAsync(
+        filteredCombos,
+        draws,
+        30,
+        (p) => setProgress(p)
+      );
+      setTopCombos(scored);
+      setCurrentStep(7);
+    } catch (err) {
+      setError("확률 분석 중 오류가 발생했습니다.");
+      console.error(err);
+    } finally {
+      setLoading(false);
+      setProgress(0);
+      setProgressLabel("");
+    }
   }, [filteredCombos, draws]);
 
   // 엑셀 내보내기
@@ -249,12 +278,17 @@ export default function ValidatePage() {
         번호5: item.numbers[4],
         번호6: item.numbers[5],
         총점: Number(item.score.toFixed(1)),
-        빈도점수: Number(item.details.frequencyScore.toFixed(1)),
-        균형점수: Number(item.details.balanceScore.toFixed(1)),
+        빈도: Number(item.details.frequencyScore.toFixed(1)),
+        동반출현: Number(item.details.coOccurrenceScore.toFixed(1)),
+        AC값: Number(item.details.acScore.toFixed(1)),
+        이월: Number(item.details.carryoverScore.toFixed(1)),
+        균형: Number(item.details.balanceScore.toFixed(1)),
         합계: total,
         합계점수: Number(item.details.sumScore.toFixed(1)),
         "홀:짝": `${oddCount}:${6 - oddCount}`,
         홀짝점수: Number(item.details.oddEvenScore.toFixed(1)),
+        연속: Number(item.details.consecutiveScore.toFixed(1)),
+        끝수: Number(item.details.lastDigitScore.toFixed(1)),
       };
     });
 
@@ -265,12 +299,17 @@ export default function ValidatePage() {
       { wch: 5 },  // 순위
       { wch: 6 }, { wch: 6 }, { wch: 6 }, { wch: 6 }, { wch: 6 }, { wch: 6 }, // 번호1~6
       { wch: 7 },  // 총점
-      { wch: 8 },  // 빈도점수
-      { wch: 8 },  // 균형점수
+      { wch: 7 },  // 빈도
+      { wch: 8 },  // 동반출현
+      { wch: 7 },  // AC값
+      { wch: 7 },  // 이월
+      { wch: 7 },  // 균형
       { wch: 6 },  // 합계
       { wch: 8 },  // 합계점수
       { wch: 6 },  // 홀:짝
       { wch: 8 },  // 홀짝점수
+      { wch: 7 },  // 연속
+      { wch: 7 },  // 끝수
     ];
 
     const wb = XLSX.utils.book_new();
@@ -341,6 +380,22 @@ export default function ValidatePage() {
       {error && (
         <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
           <p className="text-red-600 font-medium">{error}</p>
+        </div>
+      )}
+
+      {/* 진행률 표시 */}
+      {loading && progressLabel && (
+        <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-blue-800 font-medium">{progressLabel}</span>
+            <span className="text-blue-600 text-sm">{progress}%</span>
+          </div>
+          <div className="w-full bg-blue-200 rounded-full h-2.5">
+            <div
+              className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
         </div>
       )}
 
@@ -729,7 +784,7 @@ export default function ValidatePage() {
                 {filterStats.excluded.toLocaleString()}개
               </div>
               <div className="text-xs text-red-500">
-                과거 100회와 3개 이상 일치
+                과거 100회와 4개 이상 일치
               </div>
             </div>
             <div className="bg-green-50 rounded-lg p-4 text-center">
@@ -784,7 +839,7 @@ export default function ValidatePage() {
               disabled={loading || filteredCombos.length === 0}
               className="mt-4 px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-bold disabled:bg-gray-400"
             >
-              {loading ? "그룹핑 중..." : "다음: 그룹핑 분석"}
+              {loading ? `그룹핑 중... ${progress}%` : "다음: 그룹핑 분석"}
             </button>
           )}
         </div>
@@ -910,7 +965,7 @@ export default function ValidatePage() {
               disabled={loading || filteredCombos.length === 0}
               className="mt-4 px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-bold disabled:bg-gray-400"
             >
-              {loading ? "그룹핑 중..." : "다음: 3개 공유 조합 분석"}
+              {loading ? `그룹핑 중... ${progress}%` : "다음: 3개 공유 조합 분석"}
             </button>
           )}
         </div>
@@ -991,7 +1046,7 @@ export default function ValidatePage() {
               disabled={loading || filteredCombos.length === 0}
               className="mt-4 px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-bold disabled:bg-gray-400"
             >
-              {loading ? "분석 중..." : "다음: 확률 기반 최종 추천"}
+              {loading ? `분석 중... ${progress}%` : "다음: 확률 기반 최종 추천"}
             </button>
           )}
         </div>
@@ -1004,29 +1059,45 @@ export default function ValidatePage() {
             Step 8: 확률 기반 최종 추천
           </h2>
           <p className="text-sm text-gray-500 mb-4">
-            빈도(40%) + 범대균형(20%) + 합계범위(20%) + 홀짝균형(20%) 기준으로 점수를 매겨 상위 30개 조합을 추천합니다.
+            9가지 기준으로 점수를 매겨 상위 30개 조합을 추천합니다.
           </p>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-            <div className="bg-orange-50 rounded-lg p-3 text-center">
-              <div className="text-xs text-orange-600">빈도 점수</div>
-              <div className="text-sm font-bold text-orange-800">40%</div>
-              <div className="text-xs text-orange-500">출현 빈도 높은 번호</div>
+          <div className="grid grid-cols-3 md:grid-cols-5 gap-2 mb-6">
+            <div className="bg-orange-50 rounded-lg p-2 text-center">
+              <div className="text-xs text-orange-600">빈도</div>
+              <div className="text-sm font-bold text-orange-800">15%</div>
             </div>
-            <div className="bg-blue-50 rounded-lg p-3 text-center">
-              <div className="text-xs text-blue-600">범대 균형</div>
-              <div className="text-sm font-bold text-blue-800">20%</div>
-              <div className="text-xs text-blue-500">다양한 범대 분포</div>
+            <div className="bg-pink-50 rounded-lg p-2 text-center">
+              <div className="text-xs text-pink-600">동반출현</div>
+              <div className="text-sm font-bold text-pink-800">15%</div>
             </div>
-            <div className="bg-green-50 rounded-lg p-3 text-center">
-              <div className="text-xs text-green-600">합계 범위</div>
-              <div className="text-sm font-bold text-green-800">20%</div>
-              <div className="text-xs text-green-500">합계 100~175 최적</div>
+            <div className="bg-cyan-50 rounded-lg p-2 text-center">
+              <div className="text-xs text-cyan-600">AC값</div>
+              <div className="text-sm font-bold text-cyan-800">15%</div>
             </div>
-            <div className="bg-purple-50 rounded-lg p-3 text-center">
-              <div className="text-xs text-purple-600">홀짝 균형</div>
-              <div className="text-sm font-bold text-purple-800">20%</div>
-              <div className="text-xs text-purple-500">홀짝 3:3 최적</div>
+            <div className="bg-amber-50 rounded-lg p-2 text-center">
+              <div className="text-xs text-amber-600">이월번호</div>
+              <div className="text-sm font-bold text-amber-800">15%</div>
+            </div>
+            <div className="bg-blue-50 rounded-lg p-2 text-center">
+              <div className="text-xs text-blue-600">범대균형</div>
+              <div className="text-sm font-bold text-blue-800">10%</div>
+            </div>
+            <div className="bg-green-50 rounded-lg p-2 text-center">
+              <div className="text-xs text-green-600">합계범위</div>
+              <div className="text-sm font-bold text-green-800">10%</div>
+            </div>
+            <div className="bg-purple-50 rounded-lg p-2 text-center">
+              <div className="text-xs text-purple-600">홀짝균형</div>
+              <div className="text-sm font-bold text-purple-800">10%</div>
+            </div>
+            <div className="bg-rose-50 rounded-lg p-2 text-center">
+              <div className="text-xs text-rose-600">연속번호</div>
+              <div className="text-sm font-bold text-rose-800">5%</div>
+            </div>
+            <div className="bg-indigo-50 rounded-lg p-2 text-center">
+              <div className="text-xs text-indigo-600">끝수다양</div>
+              <div className="text-sm font-bold text-indigo-800">5%</div>
             </div>
           </div>
 
@@ -1069,18 +1140,33 @@ export default function ValidatePage() {
                         </span>
                       </div>
                     </div>
-                    <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                      <span className="bg-orange-100 text-orange-700 px-2 py-0.5 rounded">
-                        빈도 {item.details.frequencyScore.toFixed(0)}
+                    <div className="mt-2 flex flex-wrap gap-1.5 text-xs">
+                      <span className="bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded">
+                        빈도{item.details.frequencyScore.toFixed(0)}
                       </span>
-                      <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
-                        균형 {item.details.balanceScore.toFixed(0)}
+                      <span className="bg-pink-100 text-pink-700 px-1.5 py-0.5 rounded">
+                        동반{item.details.coOccurrenceScore.toFixed(0)}
                       </span>
-                      <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded">
-                        합계 {total} ({item.details.sumScore.toFixed(0)})
+                      <span className="bg-cyan-100 text-cyan-700 px-1.5 py-0.5 rounded">
+                        AC{item.details.acScore.toFixed(0)}
                       </span>
-                      <span className="bg-purple-100 text-purple-700 px-2 py-0.5 rounded">
-                        홀{oddCount}:짝{6 - oddCount} ({item.details.oddEvenScore.toFixed(0)})
+                      <span className="bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">
+                        이월{item.details.carryoverScore.toFixed(0)}
+                      </span>
+                      <span className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">
+                        균형{item.details.balanceScore.toFixed(0)}
+                      </span>
+                      <span className="bg-green-100 text-green-700 px-1.5 py-0.5 rounded">
+                        합{total}({item.details.sumScore.toFixed(0)})
+                      </span>
+                      <span className="bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded">
+                        홀{oddCount}짝{6 - oddCount}({item.details.oddEvenScore.toFixed(0)})
+                      </span>
+                      <span className="bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded">
+                        연속{item.details.consecutiveScore.toFixed(0)}
+                      </span>
+                      <span className="bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded">
+                        끝수{item.details.lastDigitScore.toFixed(0)}
                       </span>
                     </div>
                   </div>
