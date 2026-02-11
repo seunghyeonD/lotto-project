@@ -12,7 +12,7 @@ import {
   AnalyzeCombinationRequest,
 } from '@/types/lotto';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
 class LottoApiClient {
   private baseUrl: string;
@@ -58,14 +58,14 @@ class LottoApiClient {
    * 전체 당첨번호 조회
    */
   async getAllDraws(): Promise<LottoDrawResult[]> {
-    return this.fetch<LottoDrawResult[]>('/api/lotto/draws');
+    return this.fetch<LottoDrawResult[]>('/api/lotto/recent/1000');
   }
 
   /**
    * 특정 회차 당첨번호 조회
    */
   async getDrawByRound(round: number): Promise<LottoDrawResult> {
-    return this.fetch<LottoDrawResult>(`/api/lotto/draws/${round}`);
+    return this.fetch<LottoDrawResult>(`/api/lotto/draw/${round}`);
   }
 
   /**
@@ -76,7 +76,7 @@ class LottoApiClient {
     endRound: number,
   ): Promise<LottoDrawResult[]> {
     return this.fetch<LottoDrawResult[]>(
-      `/api/lotto/draws/range?start=${startRound}&end=${endRound}`,
+      `/api/lotto/range?start=${startRound}&end=${endRound}`,
     );
   }
 
@@ -84,7 +84,7 @@ class LottoApiClient {
    * 최근 N회차 조회
    */
   async getRecentDraws(count: number): Promise<LottoDrawResult[]> {
-    return this.fetch<LottoDrawResult[]>(`/api/lotto/draws/recent/${count}`);
+    return this.fetch<LottoDrawResult[]>(`/api/lotto/recent/${count}`);
   }
 
   /**
@@ -111,7 +111,7 @@ class LottoApiClient {
     request: GenerateCombinationsRequest,
   ): Promise<CombinationGenerationResult> {
     return this.fetch<CombinationGenerationResult>(
-      '/api/lotto/combinations/generate',
+      '/api/lotto/generate',
       {
         method: 'POST',
         body: JSON.stringify(request),
@@ -126,7 +126,7 @@ class LottoApiClient {
     request: ValidateCombinationRequest,
   ): Promise<CombinationValidationResult[]> {
     return this.fetch<CombinationValidationResult[]>(
-      '/api/lotto/combinations/validate',
+      '/api/lotto/validate',
       {
         method: 'POST',
         body: JSON.stringify(request),
@@ -140,7 +140,7 @@ class LottoApiClient {
   async analyzeCombination(
     request: AnalyzeCombinationRequest,
   ): Promise<any> {
-    return this.fetch<any>('/api/lotto/combinations/analyze', {
+    return this.fetch<any>('/api/lotto/analyze', {
       method: 'POST',
       body: JSON.stringify(request),
     });
