@@ -81,7 +81,7 @@ export default function StatisticsPage() {
       {/* 범위 설정 */}
       <div className="bg-white rounded-lg shadow-md p-6 mb-8">
         <h2 className="text-xl font-bold mb-4 text-gray-800">분석 범위</h2>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               시작 회차

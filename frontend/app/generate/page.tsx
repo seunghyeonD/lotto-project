@@ -169,7 +169,7 @@ export default function GeneratePage() {
           {/* 통계 */}
           <div className="bg-white rounded-lg shadow-md p-6">
             <h2 className="text-xl font-bold mb-4 text-gray-800">생성 통계</h2>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="bg-blue-50 p-4 rounded-lg">
                 <div className="text-sm text-gray-600 mb-1">총 생성</div>
                 <div className="text-2xl font-bold text-blue-600">

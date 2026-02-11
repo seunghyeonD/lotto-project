@@ -232,7 +232,7 @@ export default function AdminPage() {
         <h2 className="text-xl font-bold mb-4 text-gray-800">
           단일 회차 조회
         </h2>
-        <div className="flex gap-4 items-end mb-4">
+        <div className="flex flex-col sm:flex-row gap-4 sm:items-end mb-4">
           <div className="flex-1">
             <label className="block text-sm font-medium text-gray-700 mb-2">
               회차 번호 (1~{latestRound}회)
@@ -277,7 +277,7 @@ export default function AdminPage() {
         <h2 className="text-xl font-bold mb-4 text-gray-800">
           수동 데이터 입력
         </h2>
-        <div className="grid grid-cols-2 gap-4 mb-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               회차 번호
@@ -302,7 +302,7 @@ export default function AdminPage() {
             />
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-4 mb-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               당첨 번호 (쉼표로 구분)
@@ -344,7 +344,7 @@ export default function AdminPage() {
         <h2 className="text-xl font-bold mb-4 text-gray-800">
           여러 회차 조회
         </h2>
-        <div className="grid grid-cols-2 gap-4 mb-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               시작 회차 (1~{latestRound}회)
