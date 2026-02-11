@@ -25,7 +25,7 @@ import {
   scoreCombinationsAsync,
   getNumberRange,
 } from "@/lib/combination-generator";
-import type { ScoredCombination } from "@/lib/combination-generator";
+import type { ScoredCombination, ScoreResult } from "@/lib/combination-generator";
 
 type RangeKey = "단" | "십" | "이" | "삼" | "사";
 const RANGE_KEYS: RangeKey[] = ["단", "십", "이", "삼", "사"];
@@ -107,6 +107,7 @@ export default function ValidatePage() {
 
   // 확률 점수 결과
   const [topCombos, setTopCombos] = useState<ScoredCombination[]>([]);
+  const [allScoredCombos, setAllScoredCombos] = useState<ScoredCombination[]>([]);
 
   // 진행률 상태
   const [progress, setProgress] = useState(0);
@@ -258,13 +259,14 @@ export default function ValidatePage() {
     setProgress(0);
     setProgressLabel("확률 점수 계산 중...");
     try {
-      const scored = await scoreCombinationsAsync(
+      const { top, pool } = await scoreCombinationsAsync(
         filteredCombos,
         draws,
         30,
         (p) => setProgress(p)
       );
-      setTopCombos(scored);
+      setTopCombos(top);
+      setAllScoredCombos(pool);
       setCurrentStep(7);
     } catch (err) {
       setError("확률 분석 중 오류가 발생했습니다.");
@@ -280,37 +282,8 @@ export default function ValidatePage() {
   const handleExportExcel = useCallback(() => {
     if (topCombos.length === 0) return;
 
-    const rows = topCombos.map((item, idx) => {
-      const oddCount = item.numbers.filter((n) => n % 2 === 1).length;
-      const total = item.numbers.reduce((s, n) => s + n, 0);
-      return {
-        순위: idx + 1,
-        번호1: item.numbers[0],
-        번호2: item.numbers[1],
-        번호3: item.numbers[2],
-        번호4: item.numbers[3],
-        번호5: item.numbers[4],
-        번호6: item.numbers[5],
-        총점: Number(item.score.toFixed(1)),
-        빈도: Number(item.details.frequencyScore.toFixed(1)),
-        동반출현: Number(item.details.coOccurrenceScore.toFixed(1)),
-        AC값: Number(item.details.acScore.toFixed(1)),
-        이월: Number(item.details.carryoverScore.toFixed(1)),
-        균형: Number(item.details.balanceScore.toFixed(1)),
-        합계: total,
-        합계점수: Number(item.details.sumScore.toFixed(1)),
-        "홀:짝": `${oddCount}:${6 - oddCount}`,
-        홀짝점수: Number(item.details.oddEvenScore.toFixed(1)),
-        연속: Number(item.details.consecutiveScore.toFixed(1)),
-        끝수: Number(item.details.lastDigitScore.toFixed(1)),
-      };
-    });
-
-    const ws = XLSX.utils.json_to_sheet(rows);
-
-    // 컬럼 너비 설정
     const colCount = 19;
-    ws["!cols"] = [
+    const colWidths = [
       { wch: 5 },  // 순위
       { wch: 6 }, { wch: 6 }, { wch: 6 }, { wch: 6 }, { wch: 6 }, { wch: 6 }, // 번호1~6
       { wch: 7 },  // 총점
@@ -326,8 +299,6 @@ export default function ValidatePage() {
       { wch: 7 },  // 연속
       { wch: 7 },  // 끝수
     ];
-
-    // 공통 테두리 스타일
     const thinBorder = {
       top: { style: "thin" as const, color: { rgb: "000000" } },
       bottom: { style: "thin" as const, color: { rgb: "000000" } },
@@ -335,44 +306,76 @@ export default function ValidatePage() {
       right: { style: "thin" as const, color: { rgb: "000000" } },
     };
 
-    const rowCount = topCombos.length + 1; // 헤더 + 데이터
-
-    for (let r = 0; r < rowCount; r++) {
-      for (let c = 0; c < colCount; c++) {
-        const cellRef = XLSX.utils.encode_cell({ r, c });
-        const cell = ws[cellRef];
-        if (!cell) continue;
-
-        // 기본 스타일: 테두리 + 가운데 정렬 + 굵게
-        cell.s = {
-          border: thinBorder,
-          alignment: { horizontal: "center", vertical: "center" },
-          font: { bold: true, sz: 11 },
+    const combosToRows = (combos: ScoredCombination[]) =>
+      combos.map((item, idx) => {
+        const oddCount = item.numbers.filter((n) => n % 2 === 1).length;
+        const total = item.numbers.reduce((s, n) => s + n, 0);
+        return {
+          순위: idx + 1,
+          번호1: item.numbers[0],
+          번호2: item.numbers[1],
+          번호3: item.numbers[2],
+          번호4: item.numbers[3],
+          번호5: item.numbers[4],
+          번호6: item.numbers[5],
+          총점: Number(item.score.toFixed(1)),
+          빈도: Number(item.details.frequencyScore.toFixed(1)),
+          동반출현: Number(item.details.coOccurrenceScore.toFixed(1)),
+          AC값: Number(item.details.acScore.toFixed(1)),
+          이월: Number(item.details.carryoverScore.toFixed(1)),
+          균형: Number(item.details.balanceScore.toFixed(1)),
+          합계: total,
+          합계점수: Number(item.details.sumScore.toFixed(1)),
+          "홀:짝": `${oddCount}:${6 - oddCount}`,
+          홀짝점수: Number(item.details.oddEvenScore.toFixed(1)),
+          연속: Number(item.details.consecutiveScore.toFixed(1)),
+          끝수: Number(item.details.lastDigitScore.toFixed(1)),
         };
+      });
 
-        // 헤더 행: 주황 배경 + 검정 글자
-        if (r === 0) {
+    const applySheetStyle = (ws: XLSX.WorkSheet, dataLen: number, headerColor: string) => {
+      ws["!cols"] = colWidths;
+      const rowCount = dataLen + 1;
+      for (let r = 0; r < rowCount; r++) {
+        for (let c = 0; c < colCount; c++) {
+          const cellRef = XLSX.utils.encode_cell({ r, c });
+          const cell = ws[cellRef];
+          if (!cell) continue;
           cell.s = {
-            ...cell.s,
-            fill: { fgColor: { rgb: "FF8C00" } },
-            font: { bold: true, sz: 11, color: { rgb: "000000" } },
+            border: thinBorder,
+            alignment: { horizontal: "center", vertical: "center" },
+            font: { bold: true, sz: 11 },
           };
-        }
-
-        // 순위 컬럼(A열, c===0) 데이터 행: 노란 배경
-        if (r > 0 && c === 0) {
-          cell.s = {
-            ...cell.s,
-            fill: { fgColor: { rgb: "FFFF00" } },
-          };
+          if (r === 0) {
+            cell.s = {
+              ...cell.s,
+              fill: { fgColor: { rgb: headerColor } },
+              font: { bold: true, sz: 11, color: { rgb: "000000" } },
+            };
+          }
+          if (r > 0 && c === 0) {
+            cell.s = {
+              ...cell.s,
+              fill: { fgColor: { rgb: "FFFF00" } },
+            };
+          }
         }
       }
-    }
+    };
+
+    // 시트 1: 추천 조합 (다양성 필터 적용된 TOP 30)
+    const ws1 = XLSX.utils.json_to_sheet(combosToRows(topCombos));
+    applySheetStyle(ws1, topCombos.length, "FF8C00");
+
+    // 시트 2: 전체 후보 풀 (확률 점수 상위 전체)
+    const ws2 = XLSX.utils.json_to_sheet(combosToRows(allScoredCombos));
+    applySheetStyle(ws2, allScoredCombos.length, "4472C4");
 
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "추천 조합");
+    XLSX.utils.book_append_sheet(wb, ws1, "추천 조합");
+    XLSX.utils.book_append_sheet(wb, ws2, `전체 후보 (${allScoredCombos.length}개)`);
     XLSX.writeFile(wb, `로또_추천조합_TOP${topCombos.length}.xlsx`);
-  }, [topCombos]);
+  }, [topCombos, allScoredCombos]);
 
   const steps = [
     { label: "데이터 로딩", description: "최근 100주 당첨 데이터" },

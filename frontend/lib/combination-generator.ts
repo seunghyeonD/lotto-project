@@ -1174,13 +1174,18 @@ export function scoreCombinations(
  * 비동기 버전 - 조합에 확률 점수를 매기고 상위 조합을 반환
  * 최적화: Typed Array 룩업, 비트 연산 AC, min-heap top-N, 사전 필터, 다양성 보장
  */
+export interface ScoreResult {
+  top: ScoredCombination[];
+  pool: ScoredCombination[];
+}
+
 export async function scoreCombinationsAsync(
   combos: LottoNumber[][],
   draws: LottoDrawResult[],
   topN: number = 30,
   onProgress?: (progress: number) => void,
   chunkSize: number = 1000,
-): Promise<ScoredCombination[]> {
+): Promise<ScoreResult> {
   const ctx = buildScoringContext(draws);
   const total = combos.length;
 
@@ -1215,7 +1220,8 @@ export async function scoreCombinationsAsync(
   heap.sort((a, b) => b.score - a.score);
 
   // 다양성 기반 선택: 서로 최대 2개까지만 번호 겹침 허용
-  return selectDiverse(heap, topN, 2);
+  const top = selectDiverse(heap, topN, 2);
+  return { top, pool: heap };
 }
 
 /**
