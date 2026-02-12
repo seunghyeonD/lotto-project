@@ -1,9 +1,13 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { fetchDraw, estimateLatestRound } from '@/lib/lotto-fetcher';
 import { getLatestStoredRound, upsertDraws } from '@/lib/supabase';
 import { LottoDrawResult } from '@/types/lotto';
+import { validateSession } from '@/lib/api-auth';
 
-export async function POST() {
+export async function POST(request: NextRequest) {
+  const authError = await validateSession(request);
+  if (authError) return authError;
+
   try {
     const storedLatest = await getLatestStoredRound();
     const estimated = estimateLatestRound();
@@ -60,7 +64,7 @@ export async function POST() {
   } catch (error) {
     console.error('Sync error:', error);
     return NextResponse.json(
-      { error: 'Sync failed', detail: String(error) },
+      { error: 'Sync failed' },
       { status: 500 },
     );
   }

@@ -4,9 +4,10 @@
 
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { createBrowserClient } from "@/lib/supabase-auth";
 
 const navItems = [
   { href: "/", label: "대시보드", icon: "📊" },
@@ -19,7 +20,25 @@ const navItems = [
 
 export const Navigation: React.FC = () => {
   const pathname = usePathname();
+  const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+
+  useEffect(() => {
+    const supabase = createBrowserClient();
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      setUserEmail(user?.email ?? null);
+    });
+  }, []);
+
+  const handleLogout = async () => {
+    const supabase = createBrowserClient();
+    await supabase.auth.signOut();
+    router.push("/login");
+    router.refresh();
+  };
+
+  if (pathname === "/login") return null;
 
   return (
     <nav className="bg-white shadow-md">
@@ -45,7 +64,7 @@ export const Navigation: React.FC = () => {
           </button>
 
           {/* 데스크톱 메뉴 */}
-          <div className="hidden md:flex gap-1">
+          <div className="hidden md:flex items-center gap-1">
             {navItems.map((item) => {
               const isActive = pathname === item.href;
               return (
@@ -63,6 +82,19 @@ export const Navigation: React.FC = () => {
                 </Link>
               );
             })}
+            <div className="ml-2 pl-2 border-l border-gray-200 flex items-center gap-2">
+              {userEmail && (
+                <span className="text-xs text-gray-500 hidden lg:inline">
+                  {userEmail}
+                </span>
+              )}
+              <button
+                onClick={handleLogout}
+                className="px-3 py-2 text-sm text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all font-medium"
+              >
+                로그아웃
+              </button>
+            </div>
           </div>
         </div>
 
@@ -88,6 +120,17 @@ export const Navigation: React.FC = () => {
                   </Link>
                 );
               })}
+              <div className="mt-2 pt-2 border-t border-gray-200">
+                {userEmail && (
+                  <p className="px-4 py-1 text-xs text-gray-500">{userEmail}</p>
+                )}
+                <button
+                  onClick={handleLogout}
+                  className="w-full text-left px-4 py-3 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all font-medium"
+                >
+                  로그아웃
+                </button>
+              </div>
             </div>
           </div>
         )}
