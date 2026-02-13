@@ -5,7 +5,7 @@
 
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { lottoApi } from '@/lib/api';
 import {
   CombinationValidationResult,
@@ -17,6 +17,14 @@ import { LottoNumberSet } from '@/components/LottoNumberSet';
 export default function AnalyzePage() {
   const [selectedNumbers, setSelectedNumbers] = useState<LottoNumberType[]>([]);
   const [roundRange, setRoundRange] = useState({ start: 1, end: 100 });
+
+  useEffect(() => {
+    lottoApi.healthCheck().then(({ latestRound }) => {
+      if (latestRound > 0) {
+        setRoundRange({ start: 1, end: latestRound });
+      }
+    }).catch(() => {});
+  }, []);
   const [results, setResults] = useState<CombinationValidationResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
