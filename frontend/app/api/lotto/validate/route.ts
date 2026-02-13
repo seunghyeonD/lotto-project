@@ -14,9 +14,9 @@ export async function POST(request: NextRequest) {
       endRound: number;
     };
 
-    if (!numbers || numbers.length !== 6 || !startRound || !endRound) {
+    if (!numbers || numbers.length < 1 || numbers.length > 15 || !startRound || !endRound) {
       return NextResponse.json(
-        { error: 'Invalid request: need numbers (6), startRound, endRound' },
+        { error: 'Invalid request: need numbers (1~15), startRound, endRound' },
         { status: 400 },
       );
     }
