@@ -5,7 +5,7 @@
 
 "use client";
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import * as XLSX from "xlsx-js-style";
 import { lottoApi } from "@/lib/api";
 import {
@@ -64,8 +64,18 @@ export default function ValidatePage() {
   const [error, setError] = useState<string | null>(null);
   const [drawCount, setDrawCount] = useState(100);
   const [loadMode, setLoadMode] = useState<"recent" | "range">("recent");
-  const [rangeStart, setRangeStart] = useState(1109);
-  const [rangeEnd, setRangeEnd] = useState(1208);
+  const [rangeStart, setRangeStart] = useState(1);
+  const [rangeEnd, setRangeEnd] = useState(100);
+
+  // 최신 회차 기반으로 기본 범위 설정
+  useEffect(() => {
+    lottoApi.healthCheck().then(({ latestRound }) => {
+      if (latestRound > 0) {
+        setRangeEnd(latestRound);
+        setRangeStart(Math.max(1, latestRound - 99));
+      }
+    }).catch(() => {});
+  }, []);
 
   // 데이터
   const [draws, setDraws] = useState<LottoDrawResult[]>([]);
