@@ -772,7 +772,7 @@ export default function ValidatePage() {
             </div>
 
             {/* 최근 2주 번호 (제외 대상) */}
-            {/* <div className="bg-red-50 rounded-lg p-4">
+            <div className="bg-red-50 rounded-lg p-4">
               <h3 className="font-bold text-red-800 mb-2">
                 최근 2주 번호 (제외)
               </h3>
@@ -786,7 +786,7 @@ export default function ValidatePage() {
               <p className="mt-2 text-xs text-red-600">
                 {excludedNumbers.size}개 번호 제외
               </p>
-            </div> */}
+            </div>
           </div>
 
           {/* 범대별 최종 후보 */}
