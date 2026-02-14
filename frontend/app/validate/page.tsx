@@ -444,8 +444,7 @@ export default function ValidatePage() {
     [],
   );
   const setRangeEnd = useCallback(
-    (v: number) =>
-      dispatch({ type: "SET_FIELD", field: "rangeEnd", value: v }),
+    (v: number) => dispatch({ type: "SET_FIELD", field: "rangeEnd", value: v }),
     [],
   );
   const setCurrentStep = useCallback(
@@ -534,7 +533,11 @@ export default function ValidatePage() {
   // Step 6: 그룹핑
   const handleGroupCombinations = useCallback(async () => {
     dispatch({ type: "SET_LOADING", loading: true, error: null });
-    dispatch({ type: "SET_PROGRESS", progress: 0, label: "5개 공유 그룹 분석 중..." });
+    dispatch({
+      type: "SET_PROGRESS",
+      progress: 0,
+      label: "5개 공유 그룹 분석 중...",
+    });
     try {
       const g5 = await groupBySharedNumbersAsync(filteredCombos, 5, (p) =>
         dispatch({ type: "SET_PROGRESS", progress: Math.round(p * 0.5) }),
@@ -565,18 +568,15 @@ export default function ValidatePage() {
 
   // 연산용 조합 제한 (너무 많으면 브라우저 멈춤 방지)
   const MAX_COMBOS = 3000;
-  const getLimitedCombos = useCallback(
-    (combos: LottoNumberType[][]) => {
-      if (combos.length <= MAX_COMBOS) return combos;
-      const step = combos.length / MAX_COMBOS;
-      const sampled: LottoNumberType[][] = [];
-      for (let i = 0; i < MAX_COMBOS; i++) {
-        sampled.push(combos[Math.floor(i * step)]);
-      }
-      return sampled;
-    },
-    [],
-  );
+  const getLimitedCombos = useCallback((combos: LottoNumberType[][]) => {
+    if (combos.length <= MAX_COMBOS) return combos;
+    const step = combos.length / MAX_COMBOS;
+    const sampled: LottoNumberType[][] = [];
+    for (let i = 0; i < MAX_COMBOS; i++) {
+      sampled.push(combos[Math.floor(i * step)]);
+    }
+    return sampled;
+  }, []);
 
   // Step 7: 3개 공유 그룹핑
   const handleGroup3Combinations = useCallback(async () => {
@@ -618,7 +618,11 @@ export default function ValidatePage() {
         50,
         (p) => dispatch({ type: "SET_PROGRESS", progress: p }),
       );
-      dispatch({ type: "SCORE_SUCCESS", topCombos: top, allScoredCombos: pool });
+      dispatch({
+        type: "SCORE_SUCCESS",
+        topCombos: top,
+        allScoredCombos: pool,
+      });
     } catch (err) {
       dispatch({
         type: "SET_LOADING",
@@ -1067,7 +1071,8 @@ export default function ValidatePage() {
             {/* 최근 2주 번호 (제외 대상) */}
             <div className="bg-red-50 rounded-lg p-4">
               <h3 className="font-bold text-red-800 mb-2">
-                최근 2주 번호 (제외)
+                최근 2주 번호
+                {/* (제외) */}
               </h3>
               <div className="flex flex-wrap gap-1.5">
                 {sortedExcludedNumbers.map((num) => (
@@ -1075,7 +1080,8 @@ export default function ValidatePage() {
                 ))}
               </div>
               <p className="mt-2 text-xs text-red-600">
-                {excludedNumbers.size}개 번호 제외
+                {excludedNumbers.size}개 번호
+                {/* 제외 */}
               </p>
             </div>
           </div>
