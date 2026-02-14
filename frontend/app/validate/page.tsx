@@ -272,7 +272,7 @@ export default function ValidatePage() {
       const { top, pool } = await scoreCombinationsAsync(
         filteredCombos,
         draws,
-        30,
+        50,
         (p) => setProgress(p)
       );
       setTopCombos(top);
@@ -373,7 +373,7 @@ export default function ValidatePage() {
       }
     };
 
-    // 시트 1: 추천 조합 (다양성 필터 적용된 TOP 30)
+    // 시트 1: 추천 조합 (다양성 필터 적용된 TOP 50)
     const ws1 = XLSX.utils.json_to_sheet(combosToRows(topCombos));
     applySheetStyle(ws1, topCombos.length, "FF8C00");
 
@@ -1129,7 +1129,7 @@ export default function ValidatePage() {
             Step 8: 확률 기반 최종 추천
           </h2>
           <p className="text-sm text-gray-500 mb-4">
-            9가지 기준으로 점수를 매겨 상위 30개 조합을 추천합니다.
+            9가지 기준으로 점수를 매겨 상위 50개 조합을 추천합니다.
           </p>
 
           <div className="grid grid-cols-3 md:grid-cols-5 gap-2 mb-6">
