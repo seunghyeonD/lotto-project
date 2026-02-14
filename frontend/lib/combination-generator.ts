@@ -149,8 +149,8 @@ export function filterCandidateNumbers(
     for (const entry of entries) {
       // 10주 내에 나온 번호만 포함
       if (!recentNumbers.has(entry.number)) continue;
-      // 최근 2주 번호 제외
-      if (excludedNumbers.has(entry.number)) continue;
+      // 최근 2주 번호 제외 (주석처리: 제외 로직 비활성화)
+      // if (excludedNumbers.has(entry.number)) continue;
 
       candidates[key].push(entry.number);
       allCandidates.push(entry.number);
