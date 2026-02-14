@@ -14,13 +14,13 @@ export default function StatisticsPage() {
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [latestRound, setLatestRound] = useState<number>(100);
   const [startRound, setStartRound] = useState(1);
+  const [endRound, setEndRound] = useState(100);
 
   useEffect(() => {
     lottoApi.healthCheck().then(({ latestRound: lr }) => {
       if (lr > 0) {
-        setLatestRound(lr);
+        setEndRound(lr);
         loadStatistics(1, lr);
       } else {
         setInitialLoading(false);
@@ -48,7 +48,7 @@ export default function StatisticsPage() {
   };
 
   const handleSearch = () => {
-    loadStatistics(startRound, latestRound);
+    loadStatistics(startRound, endRound);
   };
 
   const getRangeStats = (range: string) => {
@@ -89,18 +89,18 @@ export default function StatisticsPage() {
               onChange={(e) => setStartRound(parseInt(e.target.value) || 1)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
               min="1"
-              max={latestRound}
             />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              종료 회차 (최신)
+              종료 회차
             </label>
             <input
               type="number"
-              value={latestRound}
-              disabled
-              className="w-full px-4 py-2 border border-gray-200 rounded-lg bg-gray-100 text-gray-500 cursor-not-allowed"
+              value={endRound}
+              onChange={(e) => setEndRound(parseInt(e.target.value) || 1)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
+              min="1"
             />
           </div>
           <div>

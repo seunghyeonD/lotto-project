@@ -25,7 +25,10 @@ import {
   scoreCombinationsAsync,
   getNumberRange,
 } from "@/lib/combination-generator";
-import type { ScoredCombination, ScoreResult } from "@/lib/combination-generator";
+import type {
+  ScoredCombination,
+  ScoreResult,
+} from "@/lib/combination-generator";
 
 type RangeKey = "단" | "십" | "이" | "삼" | "사";
 const RANGE_KEYS: RangeKey[] = ["단", "십", "이", "삼", "사"];
@@ -69,12 +72,15 @@ export default function ValidatePage() {
 
   // 최신 회차 기반으로 기본 범위 설정
   useEffect(() => {
-    lottoApi.healthCheck().then(({ latestRound }) => {
-      if (latestRound > 0) {
-        setRangeEnd(latestRound);
-        setRangeStart(Math.max(1, latestRound - 99));
-      }
-    }).catch(() => {});
+    lottoApi
+      .healthCheck()
+      .then(({ latestRound }) => {
+        if (latestRound > 0) {
+          setRangeEnd(latestRound);
+          setRangeStart(Math.max(1, latestRound - 99));
+        }
+      })
+      .catch(() => {});
   }, []);
 
   // 데이터
@@ -93,15 +99,15 @@ export default function ValidatePage() {
   > | null>(null);
   const [allCandidates, setAllCandidates] = useState<LottoNumberType[]>([]);
   const [recentNumbers, setRecentNumbers] = useState<Set<LottoNumberType>>(
-    new Set()
+    new Set(),
   );
   const [excludedNumbers, setExcludedNumbers] = useState<Set<LottoNumberType>>(
-    new Set()
+    new Set(),
   );
 
   // 조합 결과
   const [generatedCombos, setGeneratedCombos] = useState<LottoNumberType[][]>(
-    []
+    [],
   );
   const [filteredCombos, setFilteredCombos] = useState<LottoNumberType[][]>([]);
   const [filterStats, setFilterStats] = useState({
@@ -117,7 +123,9 @@ export default function ValidatePage() {
 
   // 확률 점수 결과
   const [topCombos, setTopCombos] = useState<ScoredCombination[]>([]);
-  const [allScoredCombos, setAllScoredCombos] = useState<ScoredCombination[]>([]);
+  const [allScoredCombos, setAllScoredCombos] = useState<ScoredCombination[]>(
+    [],
+  );
 
   // 진행률 상태
   const [progress, setProgress] = useState(0);
@@ -201,18 +209,14 @@ export default function ValidatePage() {
     setProgress(0);
     setProgressLabel("5개 공유 그룹 분석 중...");
     try {
-      const g5 = await groupBySharedNumbersAsync(
-        filteredCombos,
-        5,
-        (p) => setProgress(Math.round(p * 0.5))
+      const g5 = await groupBySharedNumbersAsync(filteredCombos, 5, (p) =>
+        setProgress(Math.round(p * 0.5)),
       );
       setGroups5(g5);
 
       setProgressLabel("4개 공유 그룹 분석 중...");
-      const g4 = await groupBySharedNumbersAsync(
-        filteredCombos,
-        4,
-        (p) => setProgress(50 + Math.round(p * 0.5))
+      const g4 = await groupBySharedNumbersAsync(filteredCombos, 4, (p) =>
+        setProgress(50 + Math.round(p * 0.5)),
       );
       setGroups4(g4);
       setCurrentStep(5);
@@ -246,10 +250,8 @@ export default function ValidatePage() {
     setProgressLabel("3개 공유 그룹 분석 중...");
     try {
       const combos = getLimitedCombos(filteredCombos);
-      const g3 = await groupByExactSharedCountAsync(
-        combos,
-        3,
-        (p) => setProgress(p)
+      const g3 = await groupByExactSharedCountAsync(combos, 3, (p) =>
+        setProgress(p),
       );
       setGroups3(g3);
       setCurrentStep(6);
@@ -273,7 +275,7 @@ export default function ValidatePage() {
         filteredCombos,
         draws,
         50,
-        (p) => setProgress(p)
+        (p) => setProgress(p),
       );
       setTopCombos(top);
       setAllScoredCombos(pool);
@@ -294,20 +296,25 @@ export default function ValidatePage() {
 
     const colCount = 19;
     const colWidths = [
-      { wch: 5 },  // 순위
-      { wch: 6 }, { wch: 6 }, { wch: 6 }, { wch: 6 }, { wch: 6 }, { wch: 6 }, // 번호1~6
-      { wch: 7 },  // 총점
-      { wch: 7 },  // 빈도
-      { wch: 8 },  // 동반출현
-      { wch: 7 },  // AC값
-      { wch: 7 },  // 이월
-      { wch: 7 },  // 균형
-      { wch: 6 },  // 합계
-      { wch: 8 },  // 합계점수
-      { wch: 6 },  // 홀:짝
-      { wch: 8 },  // 홀짝점수
-      { wch: 7 },  // 연속
-      { wch: 7 },  // 끝수
+      { wch: 5 }, // 순위
+      { wch: 6 },
+      { wch: 6 },
+      { wch: 6 },
+      { wch: 6 },
+      { wch: 6 },
+      { wch: 6 }, // 번호1~6
+      { wch: 7 }, // 총점
+      { wch: 7 }, // 빈도
+      { wch: 8 }, // 동반출현
+      { wch: 7 }, // AC값
+      { wch: 7 }, // 이월
+      { wch: 7 }, // 균형
+      { wch: 6 }, // 합계
+      { wch: 8 }, // 합계점수
+      { wch: 6 }, // 홀:짝
+      { wch: 8 }, // 홀짝점수
+      { wch: 7 }, // 연속
+      { wch: 7 }, // 끝수
     ];
     const thinBorder = {
       top: { style: "thin" as const, color: { rgb: "000000" } },
@@ -343,7 +350,11 @@ export default function ValidatePage() {
         };
       });
 
-    const applySheetStyle = (ws: XLSX.WorkSheet, dataLen: number, headerColor: string) => {
+    const applySheetStyle = (
+      ws: XLSX.WorkSheet,
+      dataLen: number,
+      headerColor: string,
+    ) => {
       ws["!cols"] = colWidths;
       const rowCount = dataLen + 1;
       for (let r = 0; r < rowCount; r++) {
@@ -383,7 +394,11 @@ export default function ValidatePage() {
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws1, "추천 조합");
-    XLSX.utils.book_append_sheet(wb, ws2, `전체 후보 (${allScoredCombos.length}개)`);
+    XLSX.utils.book_append_sheet(
+      wb,
+      ws2,
+      `전체 후보 (${allScoredCombos.length}개)`,
+    );
     XLSX.writeFile(wb, `로또_추천조합_TOP${topCombos.length}.xlsx`);
   }, [topCombos, allScoredCombos]);
 
@@ -417,8 +432,8 @@ export default function ValidatePage() {
                   idx < currentStep
                     ? "bg-green-100 text-green-800"
                     : idx === currentStep
-                    ? "bg-blue-100 text-blue-800 font-bold"
-                    : "bg-gray-100 text-gray-400"
+                      ? "bg-blue-100 text-blue-800 font-bold"
+                      : "bg-gray-100 text-gray-400"
                 }`}
               >
                 <span
@@ -426,8 +441,8 @@ export default function ValidatePage() {
                     idx < currentStep
                       ? "bg-green-500 text-white"
                       : idx === currentStep
-                      ? "bg-blue-500 text-white"
-                      : "bg-gray-300 text-white"
+                        ? "bg-blue-500 text-white"
+                        : "bg-gray-300 text-white"
                   }`}
                 >
                   {idx < currentStep ? "✓" : idx + 1}
@@ -517,8 +532,8 @@ export default function ValidatePage() {
                       setDrawCount(
                         Math.max(
                           10,
-                          Math.min(500, parseInt(e.target.value) || 100)
-                        )
+                          Math.min(500, parseInt(e.target.value) || 100),
+                        ),
                       )
                     }
                     className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-center text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -574,8 +589,8 @@ export default function ValidatePage() {
               {loading
                 ? "로딩 중..."
                 : loadMode === "recent"
-                ? `최근 ${drawCount}회 데이터 로딩`
-                : `${rangeStart}회 ~ ${rangeEnd}회 데이터 로딩`}
+                  ? `최근 ${drawCount}회 데이터 로딩`
+                  : `${rangeStart}회 ~ ${rangeEnd}회 데이터 로딩`}
             </button>
           </div>
         </div>
@@ -607,7 +622,7 @@ export default function ValidatePage() {
               <div className="text-lg font-bold text-gray-900">
                 {Math.max(
                   draws[0]?.round || 0,
-                  draws[draws.length - 1]?.round || 0
+                  draws[draws.length - 1]?.round || 0,
                 )}
                 회
               </div>
@@ -617,7 +632,7 @@ export default function ValidatePage() {
               <div className="text-lg font-bold text-gray-900">
                 {Math.min(
                   draws[0]?.round || 0,
-                  draws[draws.length - 1]?.round || 0
+                  draws[draws.length - 1]?.round || 0,
                 )}
                 회
               </div>
@@ -681,8 +696,8 @@ export default function ValidatePage() {
                         isHighlighted
                           ? "bg-yellow-50"
                           : idx % 2 === 0
-                          ? "bg-white"
-                          : "bg-gray-50"
+                            ? "bg-white"
+                            : "bg-gray-50"
                       }`}
                     >
                       <td className="border border-gray-300 px-3 py-1.5 text-center font-medium text-gray-600">
@@ -757,7 +772,7 @@ export default function ValidatePage() {
             </div>
 
             {/* 최근 2주 번호 (제외 대상) */}
-            <div className="bg-red-50 rounded-lg p-4">
+            {/* <div className="bg-red-50 rounded-lg p-4">
               <h3 className="font-bold text-red-800 mb-2">
                 최근 2주 번호 (제외)
               </h3>
@@ -771,7 +786,7 @@ export default function ValidatePage() {
               <p className="mt-2 text-xs text-red-600">
                 {excludedNumbers.size}개 번호 제외
               </p>
-            </div>
+            </div> */}
           </div>
 
           {/* 범대별 최종 후보 */}
@@ -823,8 +838,8 @@ export default function ValidatePage() {
               {loading
                 ? "조합 생성 중..."
                 : allCandidates.length < 6
-                ? "후보 번호가 6개 미만입니다"
-                : `다음: ${allCandidates.length}개 번호로 조합 생성`}
+                  ? "후보 번호가 6개 미만입니다"
+                  : `다음: ${allCandidates.length}개 번호로 조합 생성`}
             </button>
           )}
         </div>
@@ -866,7 +881,7 @@ export default function ValidatePage() {
                 필터율:{" "}
                 {filterStats.before > 0
                   ? ((filterStats.excluded / filterStats.before) * 100).toFixed(
-                      1
+                      1,
                     )
                   : 0}
                 %
@@ -1035,7 +1050,9 @@ export default function ValidatePage() {
               disabled={loading || filteredCombos.length === 0}
               className="mt-4 px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-bold disabled:bg-gray-400"
             >
-              {loading ? `그룹핑 중... ${progress}%` : "다음: 3개 공유 조합 분석"}
+              {loading
+                ? `그룹핑 중... ${progress}%`
+                : "다음: 3개 공유 조합 분석"}
             </button>
           )}
         </div>
@@ -1048,7 +1065,8 @@ export default function ValidatePage() {
             Step 7: 3개 공유 조합 (다양한 조합)
           </h2>
           <p className="text-sm text-gray-500 mb-4">
-            3개 번호만 공유하고 나머지 3개가 다른 조합 그룹입니다. 더 넓은 번호 범위를 커버합니다.
+            3개 번호만 공유하고 나머지 3개가 다른 조합 그룹입니다. 더 넓은 번호
+            범위를 커버합니다.
           </p>
 
           <div className="mb-4">
@@ -1084,7 +1102,12 @@ export default function ValidatePage() {
                           {combo.numbers.map((num) => {
                             const isShared = group.sharedNumbers.includes(num);
                             return (
-                              <span key={num} className={isShared ? "opacity-100" : "opacity-60"}>
+                              <span
+                                key={num}
+                                className={
+                                  isShared ? "opacity-100" : "opacity-60"
+                                }
+                              >
                                 <LottoBall num={num} />
                               </span>
                             );
@@ -1116,7 +1139,9 @@ export default function ValidatePage() {
               disabled={loading || filteredCombos.length === 0}
               className="mt-4 px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-bold disabled:bg-gray-400"
             >
-              {loading ? `분석 중... ${progress}%` : "다음: 확률 기반 최종 추천"}
+              {loading
+                ? `분석 중... ${progress}%`
+                : "다음: 확률 기반 최종 추천"}
             </button>
           )}
         </div>
@@ -1183,8 +1208,8 @@ export default function ValidatePage() {
                       idx < 5
                         ? "bg-gradient-to-r from-yellow-50 to-orange-50 border border-yellow-200"
                         : idx < 10
-                        ? "bg-gray-50"
-                        : "bg-white border border-gray-100"
+                          ? "bg-gray-50"
+                          : "bg-white border border-gray-100"
                     }`}
                   >
                     <div className="flex items-center gap-3">
@@ -1193,8 +1218,8 @@ export default function ValidatePage() {
                           idx < 5
                             ? "bg-yellow-500 text-white"
                             : idx < 10
-                            ? "bg-gray-400 text-white"
-                            : "bg-gray-200 text-gray-600"
+                              ? "bg-gray-400 text-white"
+                              : "bg-gray-200 text-gray-600"
                         }`}
                       >
                         {idx + 1}
@@ -1230,7 +1255,8 @@ export default function ValidatePage() {
                         합{total}({item.details.sumScore.toFixed(0)})
                       </span>
                       <span className="bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded">
-                        홀{oddCount}짝{6 - oddCount}({item.details.oddEvenScore.toFixed(0)})
+                        홀{oddCount}짝{6 - oddCount}(
+                        {item.details.oddEvenScore.toFixed(0)})
                       </span>
                       <span className="bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded">
                         연속{item.details.consecutiveScore.toFixed(0)}
@@ -1244,9 +1270,7 @@ export default function ValidatePage() {
               })}
             </div>
           ) : (
-            <p className="text-gray-400 text-sm">
-              추천 조합이 없습니다.
-            </p>
+            <p className="text-gray-400 text-sm">추천 조합이 없습니다.</p>
           )}
 
           {/* 엑셀 내보내기 */}
@@ -1256,8 +1280,18 @@ export default function ValidatePage() {
                 onClick={handleExportExcel}
                 className="flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-bold"
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                  />
                 </svg>
                 엑셀로 내보내기
               </button>
