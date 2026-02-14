@@ -35,7 +35,7 @@ const getSizeClasses = (size: 'sm' | 'md' | 'lg'): string => {
   }
 };
 
-export const LottoNumber: React.FC<LottoNumberProps> = ({
+export const LottoNumber: React.FC<LottoNumberProps> = React.memo(({
   number,
   size = 'md',
   isBonus = false,
@@ -59,4 +59,4 @@ export const LottoNumber: React.FC<LottoNumberProps> = ({
       {number}
     </div>
   );
-};
+});

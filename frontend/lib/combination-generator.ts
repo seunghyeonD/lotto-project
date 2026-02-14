@@ -10,7 +10,6 @@ import {
   FrequencyEntry,
   FrequencyRow,
   CombinationGroup,
-  NumberRange,
 } from '@/types/lotto';
 
 type RangeKey = '단' | '십' | '이' | '삼' | '사';
@@ -225,16 +224,26 @@ export function generateCombinationsFromRanges(
 
 /**
  * 숫자 배열에서 n개를 선택하는 조합 (C(n,k))
+ * 인덱스 기반으로 배열 slice/spread 없이 생성
  */
 function combinations(arr: LottoNumber[], k: number): LottoNumber[][] {
+  const n = arr.length;
   if (k === 0) return [[]];
-  if (arr.length < k) return [];
+  if (n < k) return [];
   const result: LottoNumber[][] = [];
-  for (let i = 0; i <= arr.length - k; i++) {
-    const rest = combinations(arr.slice(i + 1), k - 1);
-    for (const combo of rest) {
-      result.push([arr[i], ...combo]);
-    }
+  const indices = new Array<number>(k);
+  for (let i = 0; i < k; i++) indices[i] = i;
+
+  while (true) {
+    const combo = new Array<LottoNumber>(k);
+    for (let i = 0; i < k; i++) combo[i] = arr[indices[i]];
+    result.push(combo);
+
+    let i = k - 1;
+    while (i >= 0 && indices[i] === n - k + i) i--;
+    if (i < 0) break;
+    indices[i]++;
+    for (let j = i + 1; j < k; j++) indices[j] = indices[j - 1] + 1;
   }
   return result;
 }
@@ -301,63 +310,6 @@ export function filterByHistoricalMatch(
     beforeCount: combos.length,
     afterCount: filtered.length,
   };
-}
-
-/**
- * sharedCount개의 같은 번호를 공유하는 조합끼리 그룹핑
- */
-export function groupBySharedNumbers(
-  combos: LottoNumber[][],
-  sharedCount: number,
-): CombinationGroup[] {
-  const groups: CombinationGroup[] = [];
-  const used = new Set<number>();
-
-  for (let i = 0; i < combos.length; i++) {
-    if (used.has(i)) continue;
-
-    const group: LottoNumber[][] = [combos[i]];
-    const baseSet = new Set(combos[i]);
-
-    for (let j = i + 1; j < combos.length; j++) {
-      if (used.has(j)) continue;
-
-      // 현재 그룹의 첫 번째 조합과 sharedCount개 이상 공유하는지 확인
-      let shared = 0;
-      const sharedNums: LottoNumber[] = [];
-      for (const num of combos[j]) {
-        if (baseSet.has(num)) {
-          shared++;
-          sharedNums.push(num);
-        }
-      }
-
-      if (shared >= sharedCount) {
-        group.push(combos[j]);
-        used.add(j);
-      }
-    }
-
-    if (group.length > 1) {
-      // 공유 번호 찾기
-      const sharedNumbers: LottoNumber[] = combos[i].filter((num) =>
-        group.every((combo) => combo.includes(num)),
-      );
-
-      used.add(i);
-      groups.push({
-        sharedNumbers: sharedNumbers.sort((a, b) => a - b),
-        combinations: group.map((nums, idx) => ({
-          id: `group-${i}-${idx}`,
-          numbers: nums,
-          rangeDistribution: getRangeDistribution(nums),
-        })),
-        sharedCount,
-      });
-    }
-  }
-
-  return groups;
 }
 
 /**
@@ -516,102 +468,6 @@ export async function groupBySharedNumbersAsync(
   }
 
   onProgress?.(100);
-  return groups;
-}
-
-/**
- * 정확히 exactCount개의 같은 번호를 공유하는 조합끼리 그룹핑
- * 각 조합에서 가능한 모든 exactCount개 부분집합을 키로 사용하여 그룹핑
- */
-export function groupByExactSharedCount(
-  combos: LottoNumber[][],
-  exactCount: number,
-): CombinationGroup[] {
-  const subsetMap = new Map<number, number[]>();
-
-  if (exactCount === 3) {
-    for (let ci = 0; ci < combos.length; ci++) {
-      const c = combos[ci];
-      for (let a = 0; a < 4; a++) {
-        for (let b = a + 1; b < 5; b++) {
-          for (let d = b + 1; d < 6; d++) {
-            const key = c[a] * 10000 + c[b] * 100 + c[d];
-            const arr = subsetMap.get(key);
-            if (arr) { arr.push(ci); } else { subsetMap.set(key, [ci]); }
-          }
-        }
-      }
-    }
-  } else {
-    for (let i = 0; i < combos.length; i++) {
-      const subs = subsets(combos[i], exactCount);
-      for (const sub of subs) {
-        const key = hashSubsetKey(sub.join(','));
-        const arr = subsetMap.get(key);
-        if (arr) { arr.push(i); } else { subsetMap.set(key, [i]); }
-      }
-    }
-  }
-
-  const groups: CombinationGroup[] = [];
-  const entries: [number, number[]][] = [];
-  for (const [key, indices] of subsetMap) {
-    if (indices.length > 1) entries.push([key, indices]);
-  }
-  entries.sort((a, b) => b[1].length - a[1].length);
-
-  for (const [numKey, indices] of entries) {
-    let sharedNumbers: LottoNumber[];
-    if (exactCount === 3) {
-      const n3 = (numKey % 100) as LottoNumber;
-      const n2 = (Math.floor(numKey / 100) % 100) as LottoNumber;
-      const n1 = Math.floor(numKey / 10000) as LottoNumber;
-      sharedNumbers = [n1, n2, n3];
-    } else {
-      const firstCombo = combos[indices[0]];
-      const commonNums: LottoNumber[] = [];
-      for (const num of firstCombo) {
-        let inAll = true;
-        for (let k = 1; k < Math.min(indices.length, 5); k++) {
-          if (!combos[indices[k]].includes(num)) { inAll = false; break; }
-        }
-        if (inAll) commonNums.push(num);
-      }
-      sharedNumbers = commonNums.slice(0, exactCount);
-    }
-
-    const sharedSet = new Set(sharedNumbers);
-    const candidatesInGroup: LottoNumber[][] = [];
-    for (const idx of indices) {
-      const combo = combos[idx];
-      let overlap = 0;
-      for (const n of combo) { if (sharedSet.has(n)) overlap++; }
-      if (overlap === exactCount) candidatesInGroup.push(combo);
-    }
-
-    // 그룹 내 모든 조합이 정확히 exactCount개만 공유하도록 그리디 필터
-    const validCombos: LottoNumber[][] = [];
-    for (const cand of candidatesInGroup) {
-      let fits = true;
-      for (const sel of validCombos) {
-        if (countSharedNumbers(cand, sel) !== exactCount) { fits = false; break; }
-      }
-      if (fits) validCombos.push(cand);
-    }
-
-    if (validCombos.length >= 2) {
-      groups.push({
-        sharedNumbers,
-        combinations: validCombos.map((nums, idx) => ({
-          id: `g3-${numKey}-${idx}`,
-          numbers: nums,
-          rangeDistribution: getRangeDistribution(nums),
-        })),
-        sharedCount: exactCount,
-      });
-    }
-  }
-
   return groups;
 }
 
@@ -814,56 +670,6 @@ export function calcAC(numbers: LottoNumber[]): number {
     }
   }
   return diffs.size - (numbers.length - 1); // AC = 고유차이수 - 5
-}
-
-/**
- * 동반출현 빈도 계산
- * 조합 내 모든 번호 쌍이 과거 당첨에서 함께 나온 횟수의 합
- */
-export function calcCoOccurrence(
-  combo: LottoNumber[],
-  draws: LottoDrawResult[],
-): number {
-  let totalCoOccurrence = 0;
-  for (let i = 0; i < combo.length; i++) {
-    for (let j = i + 1; j < combo.length; j++) {
-      for (const draw of draws) {
-        const nums = draw.numbers;
-        if (nums.includes(combo[i]) && nums.includes(combo[j])) {
-          totalCoOccurrence++;
-        }
-      }
-    }
-  }
-  return totalCoOccurrence;
-}
-
-/**
- * 연속번호 보너스 계산
- * 연속 쌍이 1~2개이면 보너스, 0개나 3개 이상은 감점
- */
-export function calcConsecutiveBonus(numbers: LottoNumber[]): number {
-  const sorted = [...numbers].sort((a, b) => a - b);
-  let consecutivePairs = 0;
-  for (let i = 0; i < sorted.length - 1; i++) {
-    if (sorted[i + 1] - sorted[i] === 1) {
-      consecutivePairs++;
-    }
-  }
-  if (consecutivePairs === 1) return 100;
-  if (consecutivePairs === 2) return 80;
-  if (consecutivePairs === 0) return 40;
-  return 20; // 3개 이상
-}
-
-/**
- * 끝수(일의 자리) 다양성 계산
- * 끝수가 다양할수록 높은 점수 (최대 6가지 끝수 = 100점)
- */
-export function calcLastDigitDiversity(numbers: LottoNumber[]): number {
-  const lastDigits = new Set(numbers.map((n) => n % 10));
-  // 6개 번호 중 고유 끝수 수: 최대 6, 최소 1
-  return (lastDigits.size / 6) * 100;
 }
 
 /**
@@ -1150,24 +956,6 @@ function selectDiverse(
   }
 
   return selected;
-}
-
-export function scoreCombinations(
-  combos: LottoNumber[][],
-  draws: LottoDrawResult[],
-  topN: number = 30,
-): ScoredCombination[] {
-  const ctx = buildScoringContext(draws);
-  const scored: ScoredCombination[] = [];
-
-  for (const combo of combos) {
-    const result = scoreOneCombo(combo, ctx);
-    if (result) scored.push(result);
-  }
-
-  scored.sort((a, b) => b.score - a.score);
-  // 후보 풀에서 다양성 기반 선택 (최대 2개까지 번호 겹침 허용)
-  return selectDiverse(scored.slice(0, topN * 10), topN, 2);
 }
 
 /**

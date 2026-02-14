@@ -5,7 +5,7 @@
 
 "use client";
 
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useReducer, useCallback, useEffect, useMemo } from "react";
 import * as XLSX from "xlsx-js-style";
 import { lottoApi } from "@/lib/api";
 import {
@@ -25,10 +25,7 @@ import {
   scoreCombinationsAsync,
   getNumberRange,
 } from "@/lib/combination-generator";
-import type {
-  ScoredCombination,
-  ScoreResult,
-} from "@/lib/combination-generator";
+import type { ScoredCombination } from "@/lib/combination-generator";
 
 type RangeKey = "단" | "십" | "이" | "삼" | "사";
 const RANGE_KEYS: RangeKey[] = ["단", "십", "이", "삼", "사"];
@@ -41,7 +38,7 @@ const RANGE_COLORS: Record<RangeKey, string> = {
   사: "bg-green-500",
 };
 
-function LottoBall({
+const LottoBall = React.memo(function LottoBall({
   num,
   size = "sm",
 }: {
@@ -58,17 +55,226 @@ function LottoBall({
       {num}
     </span>
   );
+});
+
+// --- State & Reducer ---
+
+interface ValidateState {
+  currentStep: number;
+  loading: boolean;
+  error: string | null;
+  drawCount: number;
+  loadMode: "recent" | "range";
+  rangeStart: number;
+  rangeEnd: number;
+  draws: LottoDrawResult[];
+  frequencyTable: FrequencyRow[];
+  byRange: Record<RangeKey, FrequencyEntry[]> | null;
+  count45: number;
+  candidates: Record<RangeKey, LottoNumberType[]> | null;
+  allCandidates: LottoNumberType[];
+  recentNumbers: Set<LottoNumberType>;
+  excludedNumbers: Set<LottoNumberType>;
+  generatedCombos: LottoNumberType[][];
+  filteredCombos: LottoNumberType[][];
+  filterStats: { before: number; after: number; excluded: number };
+  groups5: CombinationGroup[];
+  groups4: CombinationGroup[];
+  groups3: CombinationGroup[];
+  topCombos: ScoredCombination[];
+  allScoredCombos: ScoredCombination[];
+  progress: number;
+  progressLabel: string;
 }
 
+const initialState: ValidateState = {
+  currentStep: 0,
+  loading: false,
+  error: null,
+  drawCount: 100,
+  loadMode: "recent",
+  rangeStart: 1,
+  rangeEnd: 100,
+  draws: [],
+  frequencyTable: [],
+  byRange: null,
+  count45: 0,
+  candidates: null,
+  allCandidates: [],
+  recentNumbers: new Set(),
+  excludedNumbers: new Set(),
+  generatedCombos: [],
+  filteredCombos: [],
+  filterStats: { before: 0, after: 0, excluded: 0 },
+  groups5: [],
+  groups4: [],
+  groups3: [],
+  topCombos: [],
+  allScoredCombos: [],
+  progress: 0,
+  progressLabel: "",
+};
+
+type ValidateAction =
+  | { type: "SET_FIELD"; field: keyof ValidateState; value: unknown }
+  | { type: "SET_LOADING"; loading: boolean; error?: string | null }
+  | { type: "SET_PROGRESS"; progress: number; label?: string }
+  | { type: "LOAD_DATA_SUCCESS"; draws: LottoDrawResult[] }
+  | {
+      type: "FREQUENCY_TABLE_SUCCESS";
+      table: FrequencyRow[];
+      byRange: Record<RangeKey, FrequencyEntry[]>;
+      count45: number;
+    }
+  | {
+      type: "FILTER_SUCCESS";
+      candidates: Record<RangeKey, LottoNumberType[]>;
+      allCandidates: LottoNumberType[];
+      recentNumbers: Set<LottoNumberType>;
+      excludedNumbers: Set<LottoNumberType>;
+    }
+  | {
+      type: "COMBINATION_SUCCESS";
+      generatedCombos: LottoNumberType[][];
+      filteredCombos: LottoNumberType[][];
+      filterStats: { before: number; after: number; excluded: number };
+    }
+  | {
+      type: "GROUPING_SUCCESS";
+      groups5: CombinationGroup[];
+      groups4: CombinationGroup[];
+    }
+  | { type: "GROUP3_SUCCESS"; groups3: CombinationGroup[] }
+  | {
+      type: "SCORE_SUCCESS";
+      topCombos: ScoredCombination[];
+      allScoredCombos: ScoredCombination[];
+    }
+  | { type: "SET_RANGE_DEFAULTS"; rangeStart: number; rangeEnd: number }
+  | { type: "RESET" };
+
+function reducer(state: ValidateState, action: ValidateAction): ValidateState {
+  switch (action.type) {
+    case "SET_FIELD":
+      return { ...state, [action.field]: action.value };
+    case "SET_LOADING":
+      return {
+        ...state,
+        loading: action.loading,
+        error: action.error !== undefined ? action.error : state.error,
+      };
+    case "SET_PROGRESS":
+      return {
+        ...state,
+        progress: action.progress,
+        progressLabel:
+          action.label !== undefined ? action.label : state.progressLabel,
+      };
+    case "LOAD_DATA_SUCCESS":
+      return {
+        ...state,
+        draws: action.draws,
+        currentStep: 1,
+        loading: false,
+      };
+    case "FREQUENCY_TABLE_SUCCESS":
+      return {
+        ...state,
+        frequencyTable: action.table,
+        byRange: action.byRange,
+        count45: action.count45,
+        currentStep: 2,
+      };
+    case "FILTER_SUCCESS":
+      return {
+        ...state,
+        candidates: action.candidates,
+        allCandidates: action.allCandidates,
+        recentNumbers: action.recentNumbers,
+        excludedNumbers: action.excludedNumbers,
+        currentStep: 3,
+      };
+    case "COMBINATION_SUCCESS":
+      return {
+        ...state,
+        generatedCombos: action.generatedCombos,
+        filteredCombos: action.filteredCombos,
+        filterStats: action.filterStats,
+        currentStep: 4,
+        loading: false,
+      };
+    case "GROUPING_SUCCESS":
+      return {
+        ...state,
+        groups5: action.groups5,
+        groups4: action.groups4,
+        currentStep: 5,
+        loading: false,
+        progress: 0,
+        progressLabel: "",
+      };
+    case "GROUP3_SUCCESS":
+      return {
+        ...state,
+        groups3: action.groups3,
+        currentStep: 6,
+        loading: false,
+        progress: 0,
+        progressLabel: "",
+      };
+    case "SCORE_SUCCESS":
+      return {
+        ...state,
+        topCombos: action.topCombos,
+        allScoredCombos: action.allScoredCombos,
+        currentStep: 7,
+        loading: false,
+        progress: 0,
+        progressLabel: "",
+      };
+    case "SET_RANGE_DEFAULTS":
+      return {
+        ...state,
+        rangeStart: action.rangeStart,
+        rangeEnd: action.rangeEnd,
+      };
+    case "RESET":
+      return { ...initialState };
+    default:
+      return state;
+  }
+}
+
+// --- Component ---
+
 export default function ValidatePage() {
-  // 상태
-  const [currentStep, setCurrentStep] = useState(0);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [drawCount, setDrawCount] = useState(100);
-  const [loadMode, setLoadMode] = useState<"recent" | "range">("recent");
-  const [rangeStart, setRangeStart] = useState(1);
-  const [rangeEnd, setRangeEnd] = useState(100);
+  const [state, dispatch] = useReducer(reducer, initialState);
+  const {
+    currentStep,
+    loading,
+    error,
+    drawCount,
+    loadMode,
+    rangeStart,
+    rangeEnd,
+    draws,
+    frequencyTable,
+    byRange,
+    count45,
+    candidates,
+    allCandidates,
+    recentNumbers,
+    excludedNumbers,
+    filteredCombos,
+    filterStats,
+    groups5,
+    groups4,
+    groups3,
+    topCombos,
+    allScoredCombos,
+    progress,
+    progressLabel,
+  } = state;
 
   // 최신 회차 기반으로 기본 범위 설정
   useEffect(() => {
@@ -76,217 +282,351 @@ export default function ValidatePage() {
       .healthCheck()
       .then(({ latestRound }) => {
         if (latestRound > 0) {
-          setRangeEnd(latestRound);
-          setRangeStart(Math.max(1, latestRound - 99));
+          dispatch({
+            type: "SET_RANGE_DEFAULTS",
+            rangeStart: Math.max(1, latestRound - 99),
+            rangeEnd: latestRound,
+          });
         }
       })
       .catch(() => {});
   }, []);
 
-  // 데이터
-  const [draws, setDraws] = useState<LottoDrawResult[]>([]);
-  const [frequencyTable, setFrequencyTable] = useState<FrequencyRow[]>([]);
-  const [byRange, setByRange] = useState<Record<
-    RangeKey,
-    FrequencyEntry[]
-  > | null>(null);
-  const [count45, setCount45] = useState(0);
+  // --- Memoized derived data ---
 
-  // 필터링 결과
-  const [candidates, setCandidates] = useState<Record<
-    RangeKey,
-    LottoNumberType[]
-  > | null>(null);
-  const [allCandidates, setAllCandidates] = useState<LottoNumberType[]>([]);
-  const [recentNumbers, setRecentNumbers] = useState<Set<LottoNumberType>>(
-    new Set(),
-  );
-  const [excludedNumbers, setExcludedNumbers] = useState<Set<LottoNumberType>>(
-    new Set(),
+  const sortedRecentNumbers = useMemo(
+    () => Array.from(recentNumbers).sort((a, b) => a - b),
+    [recentNumbers],
   );
 
-  // 조합 결과
-  const [generatedCombos, setGeneratedCombos] = useState<LottoNumberType[][]>(
+  const sortedExcludedNumbers = useMemo(
+    () => Array.from(excludedNumbers).sort((a, b) => a - b),
+    [excludedNumbers],
+  );
+
+  const frequencyTableRows = useMemo(
+    () =>
+      frequencyTable.map((row, idx) => {
+        const isHighlighted = idx >= 10 && idx <= 18;
+        return (
+          <tr
+            key={row.rank}
+            className={`${
+              isHighlighted
+                ? "bg-yellow-50"
+                : idx % 2 === 0
+                  ? "bg-white"
+                  : "bg-gray-50"
+            }`}
+          >
+            <td className="border border-gray-300 px-3 py-1.5 text-center font-medium text-gray-600">
+              {row.rank}
+            </td>
+            {RANGE_KEYS.map((key) => {
+              const entry = row[key] as FrequencyEntry | null;
+              return (
+                <td
+                  key={key}
+                  className="border border-gray-300 px-3 py-1.5 text-center"
+                >
+                  {entry ? (
+                    <span className="inline-flex items-center gap-1">
+                      <LottoBall num={entry.number} />
+                      <span className="text-gray-500 text-xs">
+                        ({entry.count})
+                      </span>
+                    </span>
+                  ) : (
+                    <span className="text-gray-300">-</span>
+                  )}
+                </td>
+              );
+            })}
+            <td className="border border-gray-300 px-3 py-1.5 text-center text-gray-600">
+              {idx === 0 ? count45 : "-"}
+            </td>
+          </tr>
+        );
+      }),
+    [frequencyTable, count45],
+  );
+
+  const topCombosRendered = useMemo(
+    () =>
+      topCombos.map((item, idx) => {
+        const oddCount = item.numbers.filter((n) => n % 2 === 1).length;
+        const total = item.numbers.reduce((s, n) => s + n, 0);
+        return (
+          <div
+            key={idx}
+            className={`rounded-lg p-4 ${
+              idx < 5
+                ? "bg-gradient-to-r from-yellow-50 to-orange-50 border border-yellow-200"
+                : idx < 10
+                  ? "bg-gray-50"
+                  : "bg-white border border-gray-100"
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <span
+                className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                  idx < 5
+                    ? "bg-yellow-500 text-white"
+                    : idx < 10
+                      ? "bg-gray-400 text-white"
+                      : "bg-gray-200 text-gray-600"
+                }`}
+              >
+                {idx + 1}
+              </span>
+              <div className="flex gap-1.5">
+                {item.numbers.map((num) => (
+                  <LottoBall key={num} num={num} size="md" />
+                ))}
+              </div>
+              <div className="ml-auto flex items-center gap-4">
+                <span className="text-lg font-bold text-orange-600">
+                  {item.score.toFixed(1)}점
+                </span>
+              </div>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-1.5 text-xs">
+              <span className="bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded">
+                빈도{item.details.frequencyScore.toFixed(0)}
+              </span>
+              <span className="bg-pink-100 text-pink-700 px-1.5 py-0.5 rounded">
+                동반{item.details.coOccurrenceScore.toFixed(0)}
+              </span>
+              <span className="bg-cyan-100 text-cyan-700 px-1.5 py-0.5 rounded">
+                AC{item.details.acScore.toFixed(0)}
+              </span>
+              <span className="bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">
+                이월{item.details.carryoverScore.toFixed(0)}
+              </span>
+              <span className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">
+                균형{item.details.balanceScore.toFixed(0)}
+              </span>
+              <span className="bg-green-100 text-green-700 px-1.5 py-0.5 rounded">
+                합{total}({item.details.sumScore.toFixed(0)})
+              </span>
+              <span className="bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded">
+                홀{oddCount}짝{6 - oddCount}(
+                {item.details.oddEvenScore.toFixed(0)})
+              </span>
+              <span className="bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded">
+                연속{item.details.consecutiveScore.toFixed(0)}
+              </span>
+              <span className="bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded">
+                끝수{item.details.lastDigitScore.toFixed(0)}
+              </span>
+            </div>
+          </div>
+        );
+      }),
+    [topCombos],
+  );
+
+  // --- Field setters ---
+
+  const setLoadMode = useCallback(
+    (v: "recent" | "range") =>
+      dispatch({ type: "SET_FIELD", field: "loadMode", value: v }),
     [],
   );
-  const [filteredCombos, setFilteredCombos] = useState<LottoNumberType[][]>([]);
-  const [filterStats, setFilterStats] = useState({
-    before: 0,
-    after: 0,
-    excluded: 0,
-  });
-
-  // 그룹핑 결과
-  const [groups5, setGroups5] = useState<CombinationGroup[]>([]);
-  const [groups4, setGroups4] = useState<CombinationGroup[]>([]);
-  const [groups3, setGroups3] = useState<CombinationGroup[]>([]);
-
-  // 확률 점수 결과
-  const [topCombos, setTopCombos] = useState<ScoredCombination[]>([]);
-  const [allScoredCombos, setAllScoredCombos] = useState<ScoredCombination[]>(
+  const setDrawCount = useCallback(
+    (v: number) =>
+      dispatch({ type: "SET_FIELD", field: "drawCount", value: v }),
+    [],
+  );
+  const setRangeStart = useCallback(
+    (v: number) =>
+      dispatch({ type: "SET_FIELD", field: "rangeStart", value: v }),
+    [],
+  );
+  const setRangeEnd = useCallback(
+    (v: number) =>
+      dispatch({ type: "SET_FIELD", field: "rangeEnd", value: v }),
+    [],
+  );
+  const setCurrentStep = useCallback(
+    (v: number) =>
+      dispatch({ type: "SET_FIELD", field: "currentStep", value: v }),
     [],
   );
 
-  // 진행률 상태
-  const [progress, setProgress] = useState(0);
-  const [progressLabel, setProgressLabel] = useState("");
+  // --- Step handlers ---
 
   // Step 1: 데이터 로딩
   const handleLoadData = useCallback(async () => {
     try {
-      setLoading(true);
-      setError(null);
+      dispatch({ type: "SET_LOADING", loading: true, error: null });
       let recentDraws: LottoDrawResult[];
       if (loadMode === "recent") {
         recentDraws = await lottoApi.getRecentDraws(drawCount);
       } else {
         recentDraws = await lottoApi.getDrawsInRange(rangeStart, rangeEnd);
       }
-      setDraws(recentDraws);
-      setCurrentStep(1);
+      dispatch({ type: "LOAD_DATA_SUCCESS", draws: recentDraws });
     } catch (err) {
-      setError("데이터 로딩에 실패했습니다. API 서버를 확인해주세요.");
+      dispatch({
+        type: "SET_LOADING",
+        loading: false,
+        error: "데이터 로딩에 실패했습니다. API 서버를 확인해주세요.",
+      });
       console.error(err);
-    } finally {
-      setLoading(false);
     }
   }, [drawCount, loadMode, rangeStart, rangeEnd]);
 
   // Step 2: 빈도순 정리표 생성
   const handleGenerateFrequencyTable = useCallback(() => {
     const result = getFrequencyTable(draws, drawCount);
-    setFrequencyTable(result.table);
-    setByRange(result.byRange);
-    setCount45(result.count45);
-    setCurrentStep(2);
-  }, [draws]);
+    dispatch({
+      type: "FREQUENCY_TABLE_SUCCESS",
+      table: result.table,
+      byRange: result.byRange,
+      count45: result.count45,
+    });
+  }, [draws, drawCount]);
 
   // Step 3: 10주 내 번호 필터링
   const handleFilterNumbers = useCallback(() => {
     if (!byRange) return;
     const result = filterCandidateNumbers(byRange, draws, 10, 2);
-    setCandidates(result.candidates);
-    setAllCandidates(result.allCandidates);
-    setRecentNumbers(result.recentNumbers);
-    setExcludedNumbers(result.excludedNumbers);
-    setCurrentStep(3);
+    dispatch({
+      type: "FILTER_SUCCESS",
+      candidates: result.candidates,
+      allCandidates: result.allCandidates,
+      recentNumbers: result.recentNumbers,
+      excludedNumbers: result.excludedNumbers,
+    });
   }, [byRange, draws]);
 
-  // Step 4 & 5: 조합 생성 + 과거 비교
-  const handleGenerateCombinations = useCallback(() => {
-    setLoading(true);
-    setError(null);
+  // Step 4 & 5: 조합 생성 + 과거 비교 (async/await로 개선)
+  const handleGenerateCombinations = useCallback(async () => {
+    dispatch({ type: "SET_LOADING", loading: true, error: null });
 
-    // 비동기로 처리하여 UI 블로킹 방지
-    setTimeout(() => {
-      try {
-        // 15개 단위로 나눠서 C(15,6) 조합 생성
-        const combos = splitAndCombine(allCandidates, 15);
-        setGeneratedCombos(combos);
+    // requestAnimationFrame으로 UI 업데이트 후 연산 시작
+    await new Promise((r) => requestAnimationFrame(r));
 
-        // 과거 100회와 비교하여 4개 이상 일치 제외 (완화된 필터)
-        const result = filterByHistoricalMatch(combos, draws, 4);
-        setFilteredCombos(result.filtered);
-        setFilterStats({
+    try {
+      const combos = splitAndCombine(allCandidates, 15);
+      const result = filterByHistoricalMatch(combos, draws, 4);
+      dispatch({
+        type: "COMBINATION_SUCCESS",
+        generatedCombos: combos,
+        filteredCombos: result.filtered,
+        filterStats: {
           before: result.beforeCount,
           after: result.afterCount,
           excluded: result.beforeCount - result.afterCount,
-        });
-
-        setCurrentStep(4);
-      } catch (err) {
-        setError("조합 생성 중 오류가 발생했습니다.");
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    }, 50);
+        },
+      });
+    } catch (err) {
+      dispatch({
+        type: "SET_LOADING",
+        loading: false,
+        error: "조합 생성 중 오류가 발생했습니다.",
+      });
+      console.error(err);
+    }
   }, [allCandidates, draws]);
 
   // Step 6: 그룹핑
   const handleGroupCombinations = useCallback(async () => {
-    setLoading(true);
-    setProgress(0);
-    setProgressLabel("5개 공유 그룹 분석 중...");
+    dispatch({ type: "SET_LOADING", loading: true, error: null });
+    dispatch({ type: "SET_PROGRESS", progress: 0, label: "5개 공유 그룹 분석 중..." });
     try {
       const g5 = await groupBySharedNumbersAsync(filteredCombos, 5, (p) =>
-        setProgress(Math.round(p * 0.5)),
+        dispatch({ type: "SET_PROGRESS", progress: Math.round(p * 0.5) }),
       );
-      setGroups5(g5);
 
-      setProgressLabel("4개 공유 그룹 분석 중...");
+      dispatch({
+        type: "SET_PROGRESS",
+        progress: 50,
+        label: "4개 공유 그룹 분석 중...",
+      });
       const g4 = await groupBySharedNumbersAsync(filteredCombos, 4, (p) =>
-        setProgress(50 + Math.round(p * 0.5)),
+        dispatch({
+          type: "SET_PROGRESS",
+          progress: 50 + Math.round(p * 0.5),
+        }),
       );
-      setGroups4(g4);
-      setCurrentStep(5);
+      dispatch({ type: "GROUPING_SUCCESS", groups5: g5, groups4: g4 });
     } catch (err) {
-      setError("그룹핑 중 오류가 발생했습니다.");
+      dispatch({
+        type: "SET_LOADING",
+        loading: false,
+        error: "그룹핑 중 오류가 발생했습니다.",
+      });
+      dispatch({ type: "SET_PROGRESS", progress: 0, label: "" });
       console.error(err);
-    } finally {
-      setLoading(false);
-      setProgress(0);
-      setProgressLabel("");
     }
   }, [filteredCombos]);
 
   // 연산용 조합 제한 (너무 많으면 브라우저 멈춤 방지)
   const MAX_COMBOS = 3000;
-  const getLimitedCombos = useCallback((combos: LottoNumberType[][]) => {
-    if (combos.length <= MAX_COMBOS) return combos;
-    // 균등 간격 샘플링 (편향 방지)
-    const step = combos.length / MAX_COMBOS;
-    const sampled: LottoNumberType[][] = [];
-    for (let i = 0; i < MAX_COMBOS; i++) {
-      sampled.push(combos[Math.floor(i * step)]);
-    }
-    return sampled;
-  }, []);
+  const getLimitedCombos = useCallback(
+    (combos: LottoNumberType[][]) => {
+      if (combos.length <= MAX_COMBOS) return combos;
+      const step = combos.length / MAX_COMBOS;
+      const sampled: LottoNumberType[][] = [];
+      for (let i = 0; i < MAX_COMBOS; i++) {
+        sampled.push(combos[Math.floor(i * step)]);
+      }
+      return sampled;
+    },
+    [],
+  );
 
   // Step 7: 3개 공유 그룹핑
   const handleGroup3Combinations = useCallback(async () => {
-    setLoading(true);
-    setProgress(0);
-    setProgressLabel("3개 공유 그룹 분석 중...");
+    dispatch({ type: "SET_LOADING", loading: true, error: null });
+    dispatch({
+      type: "SET_PROGRESS",
+      progress: 0,
+      label: "3개 공유 그룹 분석 중...",
+    });
     try {
       const combos = getLimitedCombos(filteredCombos);
       const g3 = await groupByExactSharedCountAsync(combos, 3, (p) =>
-        setProgress(p),
+        dispatch({ type: "SET_PROGRESS", progress: p }),
       );
-      setGroups3(g3);
-      setCurrentStep(6);
+      dispatch({ type: "GROUP3_SUCCESS", groups3: g3 });
     } catch (err) {
-      setError("3개 공유 그룹핑 중 오류가 발생했습니다.");
+      dispatch({
+        type: "SET_LOADING",
+        loading: false,
+        error: "3개 공유 그룹핑 중 오류가 발생했습니다.",
+      });
+      dispatch({ type: "SET_PROGRESS", progress: 0, label: "" });
       console.error(err);
-    } finally {
-      setLoading(false);
-      setProgress(0);
-      setProgressLabel("");
     }
   }, [filteredCombos, getLimitedCombos]);
 
   // Step 8: 확률 점수 분석
   const handleScoreCombinations = useCallback(async () => {
-    setLoading(true);
-    setProgress(0);
-    setProgressLabel("확률 점수 계산 중...");
+    dispatch({ type: "SET_LOADING", loading: true, error: null });
+    dispatch({
+      type: "SET_PROGRESS",
+      progress: 0,
+      label: "확률 점수 계산 중...",
+    });
     try {
       const { top, pool } = await scoreCombinationsAsync(
         filteredCombos,
         draws,
         50,
-        (p) => setProgress(p),
+        (p) => dispatch({ type: "SET_PROGRESS", progress: p }),
       );
-      setTopCombos(top);
-      setAllScoredCombos(pool);
-      setCurrentStep(7);
+      dispatch({ type: "SCORE_SUCCESS", topCombos: top, allScoredCombos: pool });
     } catch (err) {
-      setError("확률 분석 중 오류가 발생했습니다.");
+      dispatch({
+        type: "SET_LOADING",
+        loading: false,
+        error: "확률 분석 중 오류가 발생했습니다.",
+      });
+      dispatch({ type: "SET_PROGRESS", progress: 0, label: "" });
       console.error(err);
-    } finally {
-      setLoading(false);
-      setProgress(0);
-      setProgressLabel("");
     }
   }, [filteredCombos, draws]);
 
@@ -296,25 +636,25 @@ export default function ValidatePage() {
 
     const colCount = 19;
     const colWidths = [
-      { wch: 5 }, // 순위
+      { wch: 5 },
       { wch: 6 },
       { wch: 6 },
       { wch: 6 },
       { wch: 6 },
       { wch: 6 },
-      { wch: 6 }, // 번호1~6
-      { wch: 7 }, // 총점
-      { wch: 7 }, // 빈도
-      { wch: 8 }, // 동반출현
-      { wch: 7 }, // AC값
-      { wch: 7 }, // 이월
-      { wch: 7 }, // 균형
-      { wch: 6 }, // 합계
-      { wch: 8 }, // 합계점수
-      { wch: 6 }, // 홀:짝
-      { wch: 8 }, // 홀짝점수
-      { wch: 7 }, // 연속
-      { wch: 7 }, // 끝수
+      { wch: 6 },
+      { wch: 7 },
+      { wch: 7 },
+      { wch: 8 },
+      { wch: 7 },
+      { wch: 7 },
+      { wch: 7 },
+      { wch: 6 },
+      { wch: 8 },
+      { wch: 6 },
+      { wch: 8 },
+      { wch: 7 },
+      { wch: 7 },
     ];
     const thinBorder = {
       top: { style: "thin" as const, color: { rgb: "000000" } },
@@ -384,11 +724,9 @@ export default function ValidatePage() {
       }
     };
 
-    // 시트 1: 추천 조합 (다양성 필터 적용된 TOP 50)
     const ws1 = XLSX.utils.json_to_sheet(combosToRows(topCombos));
     applySheetStyle(ws1, topCombos.length, "FF8C00");
 
-    // 시트 2: 전체 후보 풀 (확률 점수 상위 전체)
     const ws2 = XLSX.utils.json_to_sheet(combosToRows(allScoredCombos));
     applySheetStyle(ws2, allScoredCombos.length, "4472C4");
 
@@ -686,50 +1024,7 @@ export default function ValidatePage() {
                   </th>
                 </tr>
               </thead>
-              <tbody>
-                {frequencyTable.map((row, idx) => {
-                  const isHighlighted = idx >= 10 && idx <= 18;
-                  return (
-                    <tr
-                      key={row.rank}
-                      className={`${
-                        isHighlighted
-                          ? "bg-yellow-50"
-                          : idx % 2 === 0
-                            ? "bg-white"
-                            : "bg-gray-50"
-                      }`}
-                    >
-                      <td className="border border-gray-300 px-3 py-1.5 text-center font-medium text-gray-600">
-                        {row.rank}
-                      </td>
-                      {RANGE_KEYS.map((key) => {
-                        const entry = row[key] as FrequencyEntry | null;
-                        return (
-                          <td
-                            key={key}
-                            className="border border-gray-300 px-3 py-1.5 text-center"
-                          >
-                            {entry ? (
-                              <span className="inline-flex items-center gap-1">
-                                <LottoBall num={entry.number} />
-                                <span className="text-gray-500 text-xs">
-                                  ({entry.count})
-                                </span>
-                              </span>
-                            ) : (
-                              <span className="text-gray-300">-</span>
-                            )}
-                          </td>
-                        );
-                      })}
-                      <td className="border border-gray-300 px-3 py-1.5 text-center text-gray-600">
-                        {idx === 0 ? count45 : "-"}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
+              <tbody>{frequencyTableRows}</tbody>
             </table>
           </div>
           <p className="mt-2 text-xs text-gray-500">
@@ -760,11 +1055,9 @@ export default function ValidatePage() {
                 최근 10주 출현 번호
               </h3>
               <div className="flex flex-wrap gap-1.5">
-                {Array.from(recentNumbers)
-                  .sort((a, b) => a - b)
-                  .map((num) => (
-                    <LottoBall key={num} num={num} />
-                  ))}
+                {sortedRecentNumbers.map((num) => (
+                  <LottoBall key={num} num={num} />
+                ))}
               </div>
               <p className="mt-2 text-xs text-blue-600">
                 {recentNumbers.size}개 번호
@@ -777,11 +1070,9 @@ export default function ValidatePage() {
                 최근 2주 번호 (제외)
               </h3>
               <div className="flex flex-wrap gap-1.5">
-                {Array.from(excludedNumbers)
-                  .sort((a, b) => a - b)
-                  .map((num) => (
-                    <LottoBall key={num} num={num} />
-                  ))}
+                {sortedExcludedNumbers.map((num) => (
+                  <LottoBall key={num} num={num} />
+                ))}
               </div>
               <p className="mt-2 text-xs text-red-600">
                 {excludedNumbers.size}개 번호 제외
@@ -1197,78 +1488,7 @@ export default function ValidatePage() {
           </div>
 
           {topCombos.length > 0 ? (
-            <div className="space-y-3">
-              {topCombos.map((item, idx) => {
-                const oddCount = item.numbers.filter((n) => n % 2 === 1).length;
-                const total = item.numbers.reduce((s, n) => s + n, 0);
-                return (
-                  <div
-                    key={idx}
-                    className={`rounded-lg p-4 ${
-                      idx < 5
-                        ? "bg-gradient-to-r from-yellow-50 to-orange-50 border border-yellow-200"
-                        : idx < 10
-                          ? "bg-gray-50"
-                          : "bg-white border border-gray-100"
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <span
-                        className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-                          idx < 5
-                            ? "bg-yellow-500 text-white"
-                            : idx < 10
-                              ? "bg-gray-400 text-white"
-                              : "bg-gray-200 text-gray-600"
-                        }`}
-                      >
-                        {idx + 1}
-                      </span>
-                      <div className="flex gap-1.5">
-                        {item.numbers.map((num) => (
-                          <LottoBall key={num} num={num} size="md" />
-                        ))}
-                      </div>
-                      <div className="ml-auto flex items-center gap-4">
-                        <span className="text-lg font-bold text-orange-600">
-                          {item.score.toFixed(1)}점
-                        </span>
-                      </div>
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-1.5 text-xs">
-                      <span className="bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded">
-                        빈도{item.details.frequencyScore.toFixed(0)}
-                      </span>
-                      <span className="bg-pink-100 text-pink-700 px-1.5 py-0.5 rounded">
-                        동반{item.details.coOccurrenceScore.toFixed(0)}
-                      </span>
-                      <span className="bg-cyan-100 text-cyan-700 px-1.5 py-0.5 rounded">
-                        AC{item.details.acScore.toFixed(0)}
-                      </span>
-                      <span className="bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">
-                        이월{item.details.carryoverScore.toFixed(0)}
-                      </span>
-                      <span className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">
-                        균형{item.details.balanceScore.toFixed(0)}
-                      </span>
-                      <span className="bg-green-100 text-green-700 px-1.5 py-0.5 rounded">
-                        합{total}({item.details.sumScore.toFixed(0)})
-                      </span>
-                      <span className="bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded">
-                        홀{oddCount}짝{6 - oddCount}(
-                        {item.details.oddEvenScore.toFixed(0)})
-                      </span>
-                      <span className="bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded">
-                        연속{item.details.consecutiveScore.toFixed(0)}
-                      </span>
-                      <span className="bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded">
-                        끝수{item.details.lastDigitScore.toFixed(0)}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            <div className="space-y-3">{topCombosRendered}</div>
           ) : (
             <p className="text-gray-400 text-sm">추천 조합이 없습니다.</p>
           )}
@@ -1341,24 +1561,7 @@ export default function ValidatePage() {
       {currentStep > 0 && (
         <div className="text-center mt-6">
           <button
-            onClick={() => {
-              setCurrentStep(0);
-              setDraws([]);
-              setFrequencyTable([]);
-              setByRange(null);
-              setCandidates(null);
-              setAllCandidates([]);
-              setRecentNumbers(new Set());
-              setExcludedNumbers(new Set());
-              setGeneratedCombos([]);
-              setFilteredCombos([]);
-              setFilterStats({ before: 0, after: 0, excluded: 0 });
-              setGroups5([]);
-              setGroups4([]);
-              setGroups3([]);
-              setTopCombos([]);
-              setError(null);
-            }}
+            onClick={() => dispatch({ type: "RESET" })}
             className="px-6 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
           >
             처음부터 다시 시작
