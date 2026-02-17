@@ -281,7 +281,6 @@ function isValidRangeDistribution(combo: LottoNumber[]): boolean {
     else if (n <= 30) ranges[2]++;
     else if (n <= 40) ranges[3]++;
     else ranges[4]++;
-    // 어느 범대든 3개 이상이면 즉시 실패
     if (ranges[0] > 2 || ranges[1] > 2 || ranges[2] > 2 || ranges[3] > 2 || ranges[4] > 2) {
       return false;
     }
@@ -289,18 +288,44 @@ function isValidRangeDistribution(combo: LottoNumber[]): boolean {
   return true;
 }
 
+/**
+ * 범대별로 분산 그룹핑 후 C(15,6) 조합 생성
+ * 순차 그룹핑 대신 라운드로빈으로 각 그룹에 모든 범대가 포함되도록 분배
+ * → 범대별 최대 2개 제약을 만족하는 조합이 생성될 수 있음
+ */
 export function splitAndCombine(
   numbers: LottoNumber[],
   groupSize: number = 15,
 ): LottoNumber[][] {
+  // 범대별로 분류
+  const byRange: LottoNumber[][] = [[], [], [], [], []]; // 단, 십, 이, 삼, 사
+  for (const n of numbers) {
+    if (n <= 10) byRange[0].push(n);
+    else if (n <= 20) byRange[1].push(n);
+    else if (n <= 30) byRange[2].push(n);
+    else if (n <= 40) byRange[3].push(n);
+    else byRange[4].push(n);
+  }
+
+  // 라운드로빈으로 그룹에 분배 (각 그룹에 모든 범대가 골고루 들어감)
   const sorted = [...numbers].sort((a, b) => a - b);
+  const numGroups = Math.ceil(sorted.length / groupSize);
+  const groups: LottoNumber[][] = Array.from({ length: numGroups }, () => []);
+
+  let groupIdx = 0;
+  for (const range of byRange) {
+    for (const num of range) {
+      groups[groupIdx % numGroups].push(num);
+      groupIdx++;
+    }
+  }
+
   const allCombinations: LottoNumber[][] = [];
 
-  for (let i = 0; i < sorted.length; i += groupSize) {
-    const group = sorted.slice(i, i + groupSize);
+  for (const group of groups) {
     if (group.length < 6) continue;
+    group.sort((a, b) => a - b);
     const combos = combinations(group, 6);
-    // 범대별 최대 2개 제약 필터링
     for (const combo of combos) {
       if (isValidRangeDistribution(combo)) {
         allCombinations.push(combo);
