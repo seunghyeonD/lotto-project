@@ -1027,9 +1027,8 @@ function selectDiverse(
 }
 
 /**
- * 번호대별 분포 기반 조합 선택
- * 단번대(1-9) 40%, 십번대(10-19) 40%, 이번대(20+) 20% 비율로 조합 선택
- * 각 번호대별 전용 pool에서 고득점 순으로 선택
+ * 번호대별 분포 + 다양성 기반 조합 선택
+ * 단/십번대 pool을 우선 포함시키되, 모든 조합 간 겹침을 maxShared 이하로 제한
  */
 function selectByRangeDistribution(
   mainPool: ScoredCombination[],
@@ -1038,67 +1037,46 @@ function selectByRangeDistribution(
   topN: number,
   maxShared: number,
 ): ScoredCombination[] {
-  // 목표 개수: 단번대 40%, 십번대 40%, 나머지 20%
-  const targetSingle = Math.round(topN * 0.4);   // 20개
-  const targetTeens = Math.round(topN * 0.4);    // 20개
-  const targetRest = topN - targetSingle - targetTeens; // 10개
-
-  const selected: ScoredCombination[] = [];
-  const selectedKeys = new Set<string>();
-
+  // 모든 pool을 합치고 중복 제거 후 점수순 정렬
+  const seen = new Set<string>();
+  const merged: ScoredCombination[] = [];
   const comboKey = (c: ScoredCombination) => c.numbers.join(',');
 
-  // 다양성 체크: 이미 선택된 전체 목록과 비교하여 maxShared 초과 겹침 거부
-  const isDiverse = (candidate: ScoredCombination): boolean => {
-    for (const sel of selected) {
-      if (countSharedNumbers(candidate.numbers, sel.numbers) > maxShared) {
-        return false;
-      }
-    }
-    return true;
-  };
-
-  // 그룹에서 목표 개수만큼 선택 (전체 선택 목록 대비 다양성 체크)
-  const selectFromPool = (pool: ScoredCombination[], target: number) => {
-    let count = 0;
-    for (const candidate of pool) {
-      if (count >= target) break;
-      const key = comboKey(candidate);
-      if (selectedKeys.has(key)) continue;
-      if (isDiverse(candidate)) {
-        selected.push(candidate);
-        selectedKeys.add(key);
-        count++;
-      }
-    }
-    return count;
-  };
-
-  // 1. 단번대(1-10) 포함 조합 선택
-  selectFromPool(singleDigitPool, targetSingle);
-
-  // 2. 십번대(11-20) 포함 조합 선택
-  selectFromPool(teensPool, targetTeens);
-
-  // 3. 나머지를 메인 pool에서 채움
-  selectFromPool(mainPool, topN - selected.length);
-
-  // 아직 부족하면 다양성 무시하고 채움
-  if (selected.length < topN) {
-    const allPools = [...singleDigitPool, ...teensPool, ...mainPool];
-    allPools.sort((a, b) => b.score - a.score);
-    for (const candidate of allPools) {
-      if (selected.length >= topN) break;
-      const key = comboKey(candidate);
-      if (!selectedKeys.has(key)) {
-        selected.push(candidate);
-        selectedKeys.add(key);
-      }
-    }
+  // 단/십번대 pool을 먼저 넣어 우선순위 부여
+  for (const c of singleDigitPool) {
+    const key = comboKey(c);
+    if (!seen.has(key)) { seen.add(key); merged.push(c); }
+  }
+  for (const c of teensPool) {
+    const key = comboKey(c);
+    if (!seen.has(key)) { seen.add(key); merged.push(c); }
+  }
+  for (const c of mainPool) {
+    const key = comboKey(c);
+    if (!seen.has(key)) { seen.add(key); merged.push(c); }
   }
 
-  // 최종 점수순 정렬
-  selected.sort((a, b) => b.score - a.score);
+  // 점수순 정렬
+  merged.sort((a, b) => b.score - a.score);
+
+  // 다양성 기반 선택: 모든 선택된 조합과 겹침 maxShared 이하만 허용
+  const selected: ScoredCombination[] = [];
+
+  for (const candidate of merged) {
+    if (selected.length >= topN) break;
+
+    let tooSimilar = false;
+    for (const sel of selected) {
+      if (countSharedNumbers(candidate.numbers, sel.numbers) > maxShared) {
+        tooSimilar = true;
+        break;
+      }
+    }
+
+    if (!tooSimilar) {
+      selected.push(candidate);
+    }
+  }
 
   return selected;
 }
