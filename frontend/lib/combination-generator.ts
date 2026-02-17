@@ -156,6 +156,24 @@ export function filterCandidateNumbers(
     }
   }
 
+  // 각 범대별 최소 후보 보장: 10주 내 출현 번호가 없는 범대는
+  // 100주 빈도 상위 번호를 최소 3개까지 보충
+  const MIN_PER_RANGE = 3;
+  for (const key of RANGE_KEYS) {
+    if (candidates[key].length < MIN_PER_RANGE) {
+      const existing = new Set(candidates[key]);
+      const entries = byRange[key]; // 이미 빈도 내림차순 정렬됨
+      for (const entry of entries) {
+        if (candidates[key].length >= MIN_PER_RANGE) break;
+        if (!existing.has(entry.number)) {
+          candidates[key].push(entry.number);
+          allCandidates.push(entry.number);
+          existing.add(entry.number);
+        }
+      }
+    }
+  }
+
   allCandidates.sort((a, b) => a - b);
 
   return {
