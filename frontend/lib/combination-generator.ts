@@ -20,11 +20,11 @@ const RANGE_KEYS: RangeKey[] = ['단', '십', '이', '삼', '사'];
  * 번호의 범대를 반환
  */
 export function getNumberRange(num: LottoNumber): RangeKey {
-  if (num >= 1 && num <= 9) return '단';
-  if (num >= 10 && num <= 19) return '십';
-  if (num >= 20 && num <= 29) return '이';
-  if (num >= 30 && num <= 39) return '삼';
-  if (num >= 40 && num <= 45) return '사';
+  if (num >= 1 && num <= 10) return '단';
+  if (num >= 11 && num <= 20) return '십';
+  if (num >= 21 && num <= 30) return '이';
+  if (num >= 31 && num <= 40) return '삼';
+  if (num >= 41 && num <= 45) return '사';
   return '단';
 }
 
@@ -269,6 +269,26 @@ function combinations(arr: LottoNumber[], k: number): LottoNumber[][] {
 /**
  * 15개 단위로 쪼개서 C(15,6) 조합 생성
  */
+/**
+ * 범대별 최대 2개 제약 체크
+ * 기획서: "열중에 단번대부터 사십번대중 최대 2개까지 나올수 있다"
+ */
+function isValidRangeDistribution(combo: LottoNumber[]): boolean {
+  const ranges = new Uint8Array(5); // 단, 십, 이, 삼, 사
+  for (const n of combo) {
+    if (n <= 10) ranges[0]++;
+    else if (n <= 20) ranges[1]++;
+    else if (n <= 30) ranges[2]++;
+    else if (n <= 40) ranges[3]++;
+    else ranges[4]++;
+    // 어느 범대든 3개 이상이면 즉시 실패
+    if (ranges[0] > 2 || ranges[1] > 2 || ranges[2] > 2 || ranges[3] > 2 || ranges[4] > 2) {
+      return false;
+    }
+  }
+  return true;
+}
+
 export function splitAndCombine(
   numbers: LottoNumber[],
   groupSize: number = 15,
@@ -280,7 +300,12 @@ export function splitAndCombine(
     const group = sorted.slice(i, i + groupSize);
     if (group.length < 6) continue;
     const combos = combinations(group, 6);
-    allCombinations.push(...combos);
+    // 범대별 최대 2개 제약 필터링
+    for (const combo of combos) {
+      if (isValidRangeDistribution(combo)) {
+        allCombinations.push(combo);
+      }
+    }
   }
 
   return allCombinations;
@@ -856,10 +881,10 @@ function scoreOneCombo(c: LottoNumber[], ctx: ScoringContext): ScoredCombination
   const ranges = new Uint8Array(5);
   for (let j = 0; j < 6; j++) {
     const n = c[j];
-    if (n <= 9) ranges[0]++;
-    else if (n <= 19) ranges[1]++;
-    else if (n <= 29) ranges[2]++;
-    else if (n <= 39) ranges[3]++;
+    if (n <= 10) ranges[0]++;
+    else if (n <= 20) ranges[1]++;
+    else if (n <= 30) ranges[2]++;
+    else if (n <= 40) ranges[3]++;
     else ranges[4]++;
   }
   let usedRanges = 0, maxInRange = 0;
@@ -1112,7 +1137,7 @@ export async function scoreCombinationsAsync(
     }
 
     // 단번대(1-9) 포함 조합 별도 보관
-    if (hasRange(result.numbers, 1, 9)) {
+    if (hasRange(result.numbers, 1, 10)) {
       if (singleDigitPool.length < rangePoolSize) {
         singleDigitPool.push(result);
         if (singleDigitPool.length === rangePoolSize) {
@@ -1127,7 +1152,7 @@ export async function scoreCombinationsAsync(
     }
 
     // 십번대(10-19) 포함 조합 별도 보관
-    if (hasRange(result.numbers, 10, 19)) {
+    if (hasRange(result.numbers, 11, 20)) {
       if (teensPool.length < rangePoolSize) {
         teensPool.push(result);
         if (teensPool.length === rangePoolSize) {
@@ -1170,8 +1195,8 @@ export async function scoreCombinationsAsync(
   let comboWithSingle = 0, comboWithTeens = 0, comboTotal = 0;
   for (const combo of combos) {
     comboTotal++;
-    if (combo.some(n => n >= 1 && n <= 9)) comboWithSingle++;
-    if (combo.some(n => n >= 10 && n <= 19)) comboWithTeens++;
+    if (combo.some(n => n >= 1 && n <= 10)) comboWithSingle++;
+    if (combo.some(n => n >= 11 && n <= 20)) comboWithTeens++;
   }
   console.log(`입력 조합 중 단번대(1-9) 포함: ${comboWithSingle}개 (${(comboWithSingle/comboTotal*100).toFixed(1)}%)`);
   console.log(`입력 조합 중 십번대(10-19) 포함: ${comboWithTeens}개 (${(comboWithTeens/comboTotal*100).toFixed(1)}%)`);
@@ -1186,8 +1211,8 @@ export async function scoreCombinationsAsync(
   const top = selectByRangeDistribution(heap, singleDigitPool, teensPool, topN, 2);
 
   // 최종 선택 결과 디버깅
-  const topWithSingle = top.filter(c => c.numbers.some(n => n >= 1 && n <= 9)).length;
-  const topWithTeens = top.filter(c => c.numbers.some(n => n >= 10 && n <= 19)).length;
+  const topWithSingle = top.filter(c => c.numbers.some(n => n >= 1 && n <= 10)).length;
+  const topWithTeens = top.filter(c => c.numbers.some(n => n >= 11 && n <= 20)).length;
   const topRest = top.length - topWithSingle - topWithTeens;
   console.log(`=== 최종 선택 결과 ===`);
   console.log(`선택된 총 조합: ${top.length}`);
