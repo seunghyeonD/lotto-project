@@ -3,10 +3,10 @@ import { getDrawsInRange, getRecentDraws } from '@/lib/supabase';
 import { LottoDrawResult, NumberStatistics, NumberRange } from '@/types/lotto';
 
 function getNumberRange(num: number): NumberRange {
-  if (num >= 1 && num <= 9) return NumberRange.DAN;
-  if (num >= 10 && num <= 19) return NumberRange.SIP;
-  if (num >= 20 && num <= 29) return NumberRange.I;
-  if (num >= 30 && num <= 39) return NumberRange.SAM;
+  if (num >= 1 && num <= 10) return NumberRange.DAN;
+  if (num >= 11 && num <= 20) return NumberRange.SIP;
+  if (num >= 21 && num <= 30) return NumberRange.I;
+  if (num >= 31 && num <= 40) return NumberRange.SAM;
   return NumberRange.SA;
 }
 
