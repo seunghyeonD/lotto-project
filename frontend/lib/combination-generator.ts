@@ -998,45 +998,43 @@ function selectByRangeDistribution(
 
   const comboKey = (c: ScoredCombination) => c.numbers.join(',');
 
-  // 다양성 체크 함수
-  const isDiverse = (candidate: ScoredCombination): boolean => {
-    for (const sel of selected) {
-      if (countSharedNumbers(candidate.numbers, sel.numbers) > maxShared) {
+  // 다양성 체크 함수 (같은 그룹 내에서만 비교)
+  const isDiverseInGroup = (candidate: ScoredCombination, group: ScoredCombination[], limit: number): boolean => {
+    for (const sel of group) {
+      if (countSharedNumbers(candidate.numbers, sel.numbers) > limit) {
         return false;
       }
     }
     return true;
   };
 
-  // 그룹에서 목표 개수만큼 선택 (다양성 적용)
-  const selectFromPool = (pool: ScoredCombination[], target: number) => {
-    let count = 0;
+  // 그룹에서 목표 개수만큼 선택 (그룹 내부에서만 다양성 체크)
+  const selectFromPool = (pool: ScoredCombination[], target: number, diversityLimit: number): ScoredCombination[] => {
+    const groupSelected: ScoredCombination[] = [];
     for (const candidate of pool) {
-      if (count >= target) break;
+      if (groupSelected.length >= target) break;
       const key = comboKey(candidate);
       if (selectedKeys.has(key)) continue;
-      if (isDiverse(candidate)) {
+      if (isDiverseInGroup(candidate, groupSelected, diversityLimit)) {
+        groupSelected.push(candidate);
         selected.push(candidate);
         selectedKeys.add(key);
-        count++;
       }
     }
-    return count;
+    return groupSelected;
   };
 
-  // 1. 단번대(1-9) 포함 조합 선택
-  const selectedSingle = selectFromPool(singleDigitPool, targetSingle);
+  // 1. 단번대(1-9) 포함 조합 선택 (번호 풀이 적으므로 겹침 4개까지 허용)
+  selectFromPool(singleDigitPool, targetSingle, 4);
 
-  // 2. 십번대(10-19) 포함 조합 선택
-  const selectedTeens = selectFromPool(teensPool, targetTeens);
+  // 2. 십번대(10-19) 포함 조합 선택 (번호 풀이 적으므로 겹침 4개까지 허용)
+  selectFromPool(teensPool, targetTeens, 4);
 
-  // 3. 나머지를 메인 pool에서 채움
-  const remaining = topN - selected.length;
-  selectFromPool(mainPool, remaining);
+  // 3. 나머지를 메인 pool에서 채움 (기존 다양성 기준 maxShared)
+  selectFromPool(mainPool, topN - selected.length, maxShared);
 
-  // 아직 부족하면 다양성 조건 완화하여 채움
+  // 아직 부족하면 다양성 무시하고 채움
   if (selected.length < topN) {
-    // 모든 pool 합쳐서 시도
     const allPools = [...singleDigitPool, ...teensPool, ...mainPool];
     allPools.sort((a, b) => b.score - a.score);
     for (const candidate of allPools) {
