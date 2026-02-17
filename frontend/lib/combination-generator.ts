@@ -960,30 +960,25 @@ function selectDiverse(
 
 /**
  * 번호대별 분포 기반 조합 선택
- * 단번대(1-9) 40%, 십번대(10-19) 40%, 이번대(20-29) 20% 비율로 조합 선택
- * 각 그룹에서 해당 번호대의 번호를 최소 1개 이상 포함하는 조합을 고득점 순으로 선택
+ * 단번대(1-9) 40%, 십번대(10-19) 40%, 이번대(20+) 20% 비율로 조합 선택
+ * 각 번호대별 전용 pool에서 고득점 순으로 선택
  */
 function selectByRangeDistribution(
-  candidates: ScoredCombination[],
+  mainPool: ScoredCombination[],
+  singleDigitPool: ScoredCombination[],
+  teensPool: ScoredCombination[],
   topN: number,
   maxShared: number,
 ): ScoredCombination[] {
-  // 번호대별 포함 여부로 조합 분류
-  const hasRange = (combo: ScoredCombination, min: number, max: number) =>
-    combo.numbers.some(n => n >= min && n <= max);
-
-  // 단번대(1-9) 포함 조합, 십번대(10-19) 포함 조합, 나머지
-  const singleDigit = candidates.filter(c => hasRange(c, 1, 9));    // 단번대
-  const teens = candidates.filter(c => hasRange(c, 10, 19));         // 십번대
-  const twenties = candidates.filter(c => hasRange(c, 20, 29));      // 이번대(나머지)
-
-  // 목표 개수: 단번대 40%, 십번대 40%, 이번대 20%
+  // 목표 개수: 단번대 40%, 십번대 40%, 나머지 20%
   const targetSingle = Math.round(topN * 0.4);   // 20개
   const targetTeens = Math.round(topN * 0.4);    // 20개
-  const targetTwenties = topN - targetSingle - targetTeens; // 10개
+  const targetRest = topN - targetSingle - targetTeens; // 10개
 
   const selected: ScoredCombination[] = [];
-  const selectedSet = new Set<ScoredCombination>();
+  const selectedKeys = new Set<string>();
+
+  const comboKey = (c: ScoredCombination) => c.numbers.join(',');
 
   // 다양성 체크 함수
   const isDiverse = (candidate: ScoredCombination): boolean => {
@@ -995,49 +990,49 @@ function selectByRangeDistribution(
     return true;
   };
 
-  // 각 그룹에서 목표 개수만큼 다양성 기반 선택
-  const selectFromGroup = (group: ScoredCombination[], target: number) => {
+  // 그룹에서 목표 개수만큼 선택 (다양성 적용)
+  const selectFromPool = (pool: ScoredCombination[], target: number) => {
     let count = 0;
-    for (const candidate of group) {
+    for (const candidate of pool) {
       if (count >= target) break;
-      if (selectedSet.has(candidate)) continue;
+      const key = comboKey(candidate);
+      if (selectedKeys.has(key)) continue;
       if (isDiverse(candidate)) {
         selected.push(candidate);
-        selectedSet.add(candidate);
+        selectedKeys.add(key);
         count++;
       }
     }
     return count;
   };
 
-  // 단번대 → 십번대 → 이번대 순서로 선택
-  selectFromGroup(singleDigit, targetSingle);
-  selectFromGroup(teens, targetTeens);
-  selectFromGroup(twenties, targetTwenties);
+  // 1. 단번대(1-9) 포함 조합 선택
+  const selectedSingle = selectFromPool(singleDigitPool, targetSingle);
 
-  // 목표를 못 채운 경우 나머지에서 채움
-  if (selected.length < topN) {
-    for (const candidate of candidates) {
-      if (selected.length >= topN) break;
-      if (!selectedSet.has(candidate)) {
-        if (isDiverse(candidate)) {
-          selected.push(candidate);
-          selectedSet.add(candidate);
-        }
-      }
-    }
-  }
+  // 2. 십번대(10-19) 포함 조합 선택
+  const selectedTeens = selectFromPool(teensPool, targetTeens);
 
-  // 그래도 부족하면 다양성 무시하고 채움
+  // 3. 나머지를 메인 pool에서 채움
+  const remaining = topN - selected.length;
+  selectFromPool(mainPool, remaining);
+
+  // 아직 부족하면 다양성 조건 완화하여 채움
   if (selected.length < topN) {
-    for (const candidate of candidates) {
+    // 모든 pool 합쳐서 시도
+    const allPools = [...singleDigitPool, ...teensPool, ...mainPool];
+    allPools.sort((a, b) => b.score - a.score);
+    for (const candidate of allPools) {
       if (selected.length >= topN) break;
-      if (!selectedSet.has(candidate)) {
+      const key = comboKey(candidate);
+      if (!selectedKeys.has(key)) {
         selected.push(candidate);
-        selectedSet.add(candidate);
+        selectedKeys.add(key);
       }
     }
   }
+
+  // 최종 점수순 정렬
+  selected.sort((a, b) => b.score - a.score);
 
   return selected;
 }
@@ -1061,10 +1056,22 @@ export async function scoreCombinationsAsync(
   const ctx = buildScoringContext(draws);
   const total = combos.length;
 
-  // 후보 풀: topN의 10배를 모아서 다양성 필터링에 사용
+  // 번호대별 별도 pool 유지 (단번대/십번대 포함 조합이 점수가 낮아도 보존)
   const poolSize = topN * 10;
+  const rangePoolSize = Math.ceil(topN * 4); // 각 번호대별 pool 크기
+
+  // 메인 pool (전체 고득점)
   const heap: ScoredCombination[] = [];
   let heapMin = -Infinity;
+
+  // 번호대별 전용 pool
+  const singleDigitPool: ScoredCombination[] = []; // 단번대(1-9) 포함
+  let sdMin = -Infinity;
+  const teensPool: ScoredCombination[] = [];        // 십번대(10-19) 포함
+  let teensMin = -Infinity;
+
+  const hasRange = (nums: LottoNumber[], min: number, max: number) =>
+    nums.some(n => n >= min && n <= max);
 
   for (let i = 0; i < total; i++) {
     if (i % chunkSize === 0) {
@@ -1075,6 +1082,7 @@ export async function scoreCombinationsAsync(
     const result = scoreOneCombo(combos[i], ctx);
     if (!result) continue;
 
+    // 메인 heap에 추가
     if (heap.length < poolSize) {
       heap.push(result);
       if (heap.length === poolSize) {
@@ -1086,14 +1094,47 @@ export async function scoreCombinationsAsync(
       heapifyDown(heap, 0);
       heapMin = heap[0].score;
     }
+
+    // 단번대(1-9) 포함 조합 별도 보관
+    if (hasRange(result.numbers, 1, 9)) {
+      if (singleDigitPool.length < rangePoolSize) {
+        singleDigitPool.push(result);
+        if (singleDigitPool.length === rangePoolSize) {
+          for (let h = Math.floor(rangePoolSize / 2) - 1; h >= 0; h--) heapifyDown(singleDigitPool, h);
+          sdMin = singleDigitPool[0].score;
+        }
+      } else if (result.score > sdMin) {
+        singleDigitPool[0] = result;
+        heapifyDown(singleDigitPool, 0);
+        sdMin = singleDigitPool[0].score;
+      }
+    }
+
+    // 십번대(10-19) 포함 조합 별도 보관
+    if (hasRange(result.numbers, 10, 19)) {
+      if (teensPool.length < rangePoolSize) {
+        teensPool.push(result);
+        if (teensPool.length === rangePoolSize) {
+          for (let h = Math.floor(rangePoolSize / 2) - 1; h >= 0; h--) heapifyDown(teensPool, h);
+          teensMin = teensPool[0].score;
+        }
+      } else if (result.score > teensMin) {
+        teensPool[0] = result;
+        heapifyDown(teensPool, 0);
+        teensMin = teensPool[0].score;
+      }
+    }
   }
 
   onProgress?.(100);
-  heap.sort((a, b) => b.score - a.score);
 
-  // 번호대별 분포 + 다양성 기반 선택
-  // 단번대(1-9) 40%, 십번대(10-19) 40%, 이번대(20-29) 20% 비율 적용
-  const top = selectByRangeDistribution(heap, topN, 2);
+  // 각 pool 정렬
+  heap.sort((a, b) => b.score - a.score);
+  singleDigitPool.sort((a, b) => b.score - a.score);
+  teensPool.sort((a, b) => b.score - a.score);
+
+  // 번호대별 분포 기반 선택
+  const top = selectByRangeDistribution(heap, singleDigitPool, teensPool, topN, 2);
   return { top, pool: heap };
 }
 
