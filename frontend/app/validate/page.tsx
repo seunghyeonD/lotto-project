@@ -509,7 +509,7 @@ export default function ValidatePage() {
 
     try {
       const combos = splitAndCombine(allCandidates, 15);
-      const result = filterByHistoricalMatch(combos, draws, 4);
+      const result = filterByHistoricalMatch(combos, draws, 3);
       dispatch({
         type: "COMBINATION_SUCCESS",
         generatedCombos: combos,
