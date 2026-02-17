@@ -1048,40 +1048,40 @@ function selectByRangeDistribution(
 
   const comboKey = (c: ScoredCombination) => c.numbers.join(',');
 
-  // 다양성 체크 함수 (같은 그룹 내에서만 비교)
-  const isDiverseInGroup = (candidate: ScoredCombination, group: ScoredCombination[], limit: number): boolean => {
-    for (const sel of group) {
-      if (countSharedNumbers(candidate.numbers, sel.numbers) > limit) {
+  // 다양성 체크: 이미 선택된 전체 목록과 비교하여 maxShared 초과 겹침 거부
+  const isDiverse = (candidate: ScoredCombination): boolean => {
+    for (const sel of selected) {
+      if (countSharedNumbers(candidate.numbers, sel.numbers) > maxShared) {
         return false;
       }
     }
     return true;
   };
 
-  // 그룹에서 목표 개수만큼 선택 (그룹 내부에서만 다양성 체크)
-  const selectFromPool = (pool: ScoredCombination[], target: number, diversityLimit: number): ScoredCombination[] => {
-    const groupSelected: ScoredCombination[] = [];
+  // 그룹에서 목표 개수만큼 선택 (전체 선택 목록 대비 다양성 체크)
+  const selectFromPool = (pool: ScoredCombination[], target: number) => {
+    let count = 0;
     for (const candidate of pool) {
-      if (groupSelected.length >= target) break;
+      if (count >= target) break;
       const key = comboKey(candidate);
       if (selectedKeys.has(key)) continue;
-      if (isDiverseInGroup(candidate, groupSelected, diversityLimit)) {
-        groupSelected.push(candidate);
+      if (isDiverse(candidate)) {
         selected.push(candidate);
         selectedKeys.add(key);
+        count++;
       }
     }
-    return groupSelected;
+    return count;
   };
 
-  // 1. 단번대(1-9) 포함 조합 선택 (번호 풀이 적으므로 겹침 4개까지 허용)
-  selectFromPool(singleDigitPool, targetSingle, 4);
+  // 1. 단번대(1-10) 포함 조합 선택
+  selectFromPool(singleDigitPool, targetSingle);
 
-  // 2. 십번대(10-19) 포함 조합 선택 (번호 풀이 적으므로 겹침 4개까지 허용)
-  selectFromPool(teensPool, targetTeens, 4);
+  // 2. 십번대(11-20) 포함 조합 선택
+  selectFromPool(teensPool, targetTeens);
 
-  // 3. 나머지를 메인 pool에서 채움 (기존 다양성 기준 maxShared)
-  selectFromPool(mainPool, topN - selected.length, maxShared);
+  // 3. 나머지를 메인 pool에서 채움
+  selectFromPool(mainPool, topN - selected.length);
 
   // 아직 부족하면 다양성 무시하고 채움
   if (selected.length < topN) {
