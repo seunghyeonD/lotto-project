@@ -1146,6 +1146,39 @@ export async function scoreCombinationsAsync(
 
   onProgress?.(100);
 
+  // 디버깅: 각 pool 크기 및 입력 데이터 확인
+  console.log('=== Step 8 디버깅 ===');
+  console.log(`입력 조합 수: ${total}`);
+  console.log(`scoreOneCombo 통과 수 (heap): ${heap.length}`);
+  console.log(`단번대(1-9) pool 크기: ${singleDigitPool.length}`);
+  console.log(`십번대(10-19) pool 크기: ${teensPool.length}`);
+  console.log(`메인 pool 크기: ${heap.length}`);
+
+  if (singleDigitPool.length > 0) {
+    console.log(`단번대 pool 최고 점수: ${singleDigitPool.reduce((max, c) => Math.max(max, c.score), 0).toFixed(2)}`);
+    console.log(`단번대 pool 상위 3개:`, singleDigitPool.slice(0, 3).map(c => `[${c.numbers.join(',')}] = ${c.score.toFixed(2)}`));
+  } else {
+    console.log('⚠️ 단번대 포함 조합이 0개입니다!');
+  }
+
+  if (teensPool.length > 0) {
+    console.log(`십번대 pool 최고 점수: ${teensPool.reduce((max, c) => Math.max(max, c.score), 0).toFixed(2)}`);
+    console.log(`십번대 pool 상위 3개:`, teensPool.slice(0, 3).map(c => `[${c.numbers.join(',')}] = ${c.score.toFixed(2)}`));
+  } else {
+    console.log('⚠️ 십번대 포함 조합이 0개입니다!');
+  }
+
+  // 입력 조합에서 번호대 분포 확인 (전체 combos에서 샘플링)
+  let comboWithSingle = 0, comboWithTeens = 0, comboTotal = 0;
+  for (const combo of combos) {
+    comboTotal++;
+    if (combo.some(n => n >= 1 && n <= 9)) comboWithSingle++;
+    if (combo.some(n => n >= 10 && n <= 19)) comboWithTeens++;
+  }
+  console.log(`입력 조합 중 단번대(1-9) 포함: ${comboWithSingle}개 (${(comboWithSingle/comboTotal*100).toFixed(1)}%)`);
+  console.log(`입력 조합 중 십번대(10-19) 포함: ${comboWithTeens}개 (${(comboWithTeens/comboTotal*100).toFixed(1)}%)`);
+  console.log('=== 디버깅 끝 ===');
+
   // 각 pool 정렬
   heap.sort((a, b) => b.score - a.score);
   singleDigitPool.sort((a, b) => b.score - a.score);
@@ -1153,6 +1186,15 @@ export async function scoreCombinationsAsync(
 
   // 번호대별 분포 기반 선택
   const top = selectByRangeDistribution(heap, singleDigitPool, teensPool, topN, 2);
+
+  // 최종 선택 결과 디버깅
+  const topWithSingle = top.filter(c => c.numbers.some(n => n >= 1 && n <= 9)).length;
+  const topWithTeens = top.filter(c => c.numbers.some(n => n >= 10 && n <= 19)).length;
+  const topRest = top.length - topWithSingle - topWithTeens;
+  console.log(`=== 최종 선택 결과 ===`);
+  console.log(`선택된 총 조합: ${top.length}`);
+  console.log(`단번대 포함: ${topWithSingle}개, 십번대 포함: ${topWithTeens}개, 나머지: ${topRest}개`);
+
   return { top, pool: heap };
 }
 
