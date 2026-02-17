@@ -959,6 +959,90 @@ function selectDiverse(
 }
 
 /**
+ * 번호대별 분포 기반 조합 선택
+ * 단번대(1-9) 40%, 십번대(10-19) 40%, 이번대(20-29) 20% 비율로 조합 선택
+ * 각 그룹에서 해당 번호대의 번호를 최소 1개 이상 포함하는 조합을 고득점 순으로 선택
+ */
+function selectByRangeDistribution(
+  candidates: ScoredCombination[],
+  topN: number,
+  maxShared: number,
+): ScoredCombination[] {
+  // 번호대별 포함 여부로 조합 분류
+  const hasRange = (combo: ScoredCombination, min: number, max: number) =>
+    combo.numbers.some(n => n >= min && n <= max);
+
+  // 단번대(1-9) 포함 조합, 십번대(10-19) 포함 조합, 나머지
+  const singleDigit = candidates.filter(c => hasRange(c, 1, 9));    // 단번대
+  const teens = candidates.filter(c => hasRange(c, 10, 19));         // 십번대
+  const twenties = candidates.filter(c => hasRange(c, 20, 29));      // 이번대(나머지)
+
+  // 목표 개수: 단번대 40%, 십번대 40%, 이번대 20%
+  const targetSingle = Math.round(topN * 0.4);   // 20개
+  const targetTeens = Math.round(topN * 0.4);    // 20개
+  const targetTwenties = topN - targetSingle - targetTeens; // 10개
+
+  const selected: ScoredCombination[] = [];
+  const selectedSet = new Set<ScoredCombination>();
+
+  // 다양성 체크 함수
+  const isDiverse = (candidate: ScoredCombination): boolean => {
+    for (const sel of selected) {
+      if (countSharedNumbers(candidate.numbers, sel.numbers) > maxShared) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  // 각 그룹에서 목표 개수만큼 다양성 기반 선택
+  const selectFromGroup = (group: ScoredCombination[], target: number) => {
+    let count = 0;
+    for (const candidate of group) {
+      if (count >= target) break;
+      if (selectedSet.has(candidate)) continue;
+      if (isDiverse(candidate)) {
+        selected.push(candidate);
+        selectedSet.add(candidate);
+        count++;
+      }
+    }
+    return count;
+  };
+
+  // 단번대 → 십번대 → 이번대 순서로 선택
+  selectFromGroup(singleDigit, targetSingle);
+  selectFromGroup(teens, targetTeens);
+  selectFromGroup(twenties, targetTwenties);
+
+  // 목표를 못 채운 경우 나머지에서 채움
+  if (selected.length < topN) {
+    for (const candidate of candidates) {
+      if (selected.length >= topN) break;
+      if (!selectedSet.has(candidate)) {
+        if (isDiverse(candidate)) {
+          selected.push(candidate);
+          selectedSet.add(candidate);
+        }
+      }
+    }
+  }
+
+  // 그래도 부족하면 다양성 무시하고 채움
+  if (selected.length < topN) {
+    for (const candidate of candidates) {
+      if (selected.length >= topN) break;
+      if (!selectedSet.has(candidate)) {
+        selected.push(candidate);
+        selectedSet.add(candidate);
+      }
+    }
+  }
+
+  return selected;
+}
+
+/**
  * 비동기 버전 - 조합에 확률 점수를 매기고 상위 조합을 반환
  * 최적화: Typed Array 룩업, 비트 연산 AC, min-heap top-N, 사전 필터, 다양성 보장
  */
@@ -1007,8 +1091,9 @@ export async function scoreCombinationsAsync(
   onProgress?.(100);
   heap.sort((a, b) => b.score - a.score);
 
-  // 다양성 기반 선택: 서로 최대 2개까지만 번호 겹침 허용
-  const top = selectDiverse(heap, topN, 2);
+  // 번호대별 분포 + 다양성 기반 선택
+  // 단번대(1-9) 40%, 십번대(10-19) 40%, 이번대(20-29) 20% 비율 적용
+  const top = selectByRangeDistribution(heap, topN, 2);
   return { top, pool: heap };
 }
 
