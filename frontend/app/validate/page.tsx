@@ -25,7 +25,8 @@ import {
   scoreCombinationsAsync,
   getNumberRange,
 } from "@/lib/combination-generator";
-import type { ScoredCombination } from "@/lib/combination-generator";
+import type { ScoredCombination, ScoringWeights } from "@/lib/combination-generator";
+import { DEFAULT_WEIGHTS } from "@/lib/combination-generator";
 
 type RangeKey = "단" | "십" | "이" | "삼" | "사";
 const RANGE_KEYS: RangeKey[] = ["단", "십", "이", "삼", "사"];
@@ -83,6 +84,7 @@ interface ValidateState {
   groups3: CombinationGroup[];
   topCombos: ScoredCombination[];
   allScoredCombos: ScoredCombination[];
+  weights: ScoringWeights;
   progress: number;
   progressLabel: string;
 }
@@ -111,6 +113,7 @@ const initialState: ValidateState = {
   groups3: [],
   topCombos: [],
   allScoredCombos: [],
+  weights: { ...DEFAULT_WEIGHTS },
   progress: 0,
   progressLabel: "",
 };
@@ -272,6 +275,7 @@ export default function ValidatePage() {
     groups3,
     topCombos,
     allScoredCombos,
+    weights,
     progress,
     progressLabel,
   } = state;
@@ -617,6 +621,8 @@ export default function ValidatePage() {
         draws,
         50,
         (p) => dispatch({ type: "SET_PROGRESS", progress: p }),
+        1000,
+        weights,
       );
       dispatch({
         type: "SCORE_SUCCESS",
@@ -632,7 +638,7 @@ export default function ValidatePage() {
       dispatch({ type: "SET_PROGRESS", progress: 0, label: "" });
       console.error(err);
     }
-  }, [filteredCombos, draws]);
+  }, [filteredCombos, draws, weights]);
 
   // 엑셀 내보내기
   const handleExportExcel = useCallback(() => {
@@ -1431,14 +1437,86 @@ export default function ValidatePage() {
           )}
 
           {currentStep === 6 && (
+            <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+              <h3 className="text-sm font-bold text-gray-700 mb-3">Step 8 채점 가중치 설정</h3>
+              {(() => {
+                const weightSum = Math.round(
+                  Object.values(weights).reduce((s, v) => s + v * 100, 0),
+                );
+                const isValid = weightSum === 100;
+                const items: { key: keyof ScoringWeights; label: string; bg: string; text: string; bold: string }[] = [
+                  { key: "frequency", label: "빈도", bg: "bg-orange-50", text: "text-orange-600", bold: "text-orange-800" },
+                  { key: "coOccurrence", label: "동반출현", bg: "bg-pink-50", text: "text-pink-600", bold: "text-pink-800" },
+                  { key: "ac", label: "AC값", bg: "bg-cyan-50", text: "text-cyan-600", bold: "text-cyan-800" },
+                  { key: "carryover", label: "이월번호", bg: "bg-amber-50", text: "text-amber-600", bold: "text-amber-800" },
+                  { key: "balance", label: "범대균형", bg: "bg-blue-50", text: "text-blue-600", bold: "text-blue-800" },
+                  { key: "sumRange", label: "합계범위", bg: "bg-green-50", text: "text-green-600", bold: "text-green-800" },
+                  { key: "oddEven", label: "홀짝균형", bg: "bg-purple-50", text: "text-purple-600", bold: "text-purple-800" },
+                  { key: "consecutive", label: "연속번호", bg: "bg-rose-50", text: "text-rose-600", bold: "text-rose-800" },
+                  { key: "lastDigit", label: "끝수다양", bg: "bg-indigo-50", text: "text-indigo-600", bold: "text-indigo-800" },
+                ];
+                return (
+                  <>
+                    <div className="grid grid-cols-3 md:grid-cols-5 gap-2 mb-2">
+                      {items.map(({ key, label, bg, text, bold }) => (
+                        <div key={key} className={`${bg} rounded-lg p-2 text-center`}>
+                          <div className={`text-xs ${text}`}>{label}</div>
+                          <div className="flex items-center justify-center gap-1 mt-1">
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              step="5"
+                              value={Math.round(weights[key] * 100)}
+                              onChange={(e) => {
+                                const val = Math.max(0, Math.min(100, parseInt(e.target.value) || 0));
+                                dispatch({
+                                  type: "SET_FIELD",
+                                  field: "weights",
+                                  value: { ...weights, [key]: val / 100 },
+                                });
+                              }}
+                              className={`w-12 px-1 py-0.5 text-center text-sm font-bold ${bold} border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
+                            />
+                            <span className={`text-xs ${text}`}>%</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className={`text-sm text-center font-medium ${isValid ? "text-green-600" : "text-red-600"}`}>
+                      합계: {weightSum}% {!isValid && "(100%가 되어야 합니다)"}
+                      {isValid && (
+                        <button
+                          onClick={() =>
+                            dispatch({
+                              type: "SET_FIELD",
+                              field: "weights",
+                              value: { ...DEFAULT_WEIGHTS },
+                            })
+                          }
+                          className="ml-3 text-xs text-gray-400 hover:text-gray-600 underline"
+                        >
+                          기본값 복원
+                        </button>
+                      )}
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          )}
+
+          {currentStep === 6 && (
             <button
               onClick={handleScoreCombinations}
-              disabled={loading || filteredCombos.length === 0}
+              disabled={loading || filteredCombos.length === 0 || Math.round(Object.values(weights).reduce((s, v) => s + v * 100, 0)) !== 100}
               className="mt-4 px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-bold disabled:bg-gray-400"
             >
               {loading
                 ? `분석 중... ${progress}%`
-                : "다음: 확률 기반 최종 추천"}
+                : Math.round(Object.values(weights).reduce((s, v) => s + v * 100, 0)) !== 100
+                  ? "가중치 합계가 100%가 아닙니다"
+                  : "다음: 확률 기반 최종 추천"}
             </button>
           )}
         </div>
@@ -1454,44 +1532,76 @@ export default function ValidatePage() {
             9가지 기준으로 점수를 매겨 상위 50개 조합을 추천합니다.
           </p>
 
-          <div className="grid grid-cols-3 md:grid-cols-5 gap-2 mb-6">
-            <div className="bg-orange-50 rounded-lg p-2 text-center">
-              <div className="text-xs text-orange-600">빈도</div>
-              <div className="text-sm font-bold text-orange-800">15%</div>
-            </div>
-            <div className="bg-pink-50 rounded-lg p-2 text-center">
-              <div className="text-xs text-pink-600">동반출현</div>
-              <div className="text-sm font-bold text-pink-800">15%</div>
-            </div>
-            <div className="bg-cyan-50 rounded-lg p-2 text-center">
-              <div className="text-xs text-cyan-600">AC값</div>
-              <div className="text-sm font-bold text-cyan-800">15%</div>
-            </div>
-            <div className="bg-amber-50 rounded-lg p-2 text-center">
-              <div className="text-xs text-amber-600">이월번호</div>
-              <div className="text-sm font-bold text-amber-800">15%</div>
-            </div>
-            <div className="bg-blue-50 rounded-lg p-2 text-center">
-              <div className="text-xs text-blue-600">범대균형</div>
-              <div className="text-sm font-bold text-blue-800">10%</div>
-            </div>
-            <div className="bg-green-50 rounded-lg p-2 text-center">
-              <div className="text-xs text-green-600">합계범위</div>
-              <div className="text-sm font-bold text-green-800">10%</div>
-            </div>
-            <div className="bg-purple-50 rounded-lg p-2 text-center">
-              <div className="text-xs text-purple-600">홀짝균형</div>
-              <div className="text-sm font-bold text-purple-800">10%</div>
-            </div>
-            <div className="bg-rose-50 rounded-lg p-2 text-center">
-              <div className="text-xs text-rose-600">연속번호</div>
-              <div className="text-sm font-bold text-rose-800">5%</div>
-            </div>
-            <div className="bg-indigo-50 rounded-lg p-2 text-center">
-              <div className="text-xs text-indigo-600">끝수다양</div>
-              <div className="text-sm font-bold text-indigo-800">5%</div>
-            </div>
-          </div>
+          {(() => {
+            const weightSum = Math.round(
+              Object.values(weights).reduce((s, v) => s + v * 100, 0),
+            );
+            const isValid = weightSum === 100;
+            const weightItems: {
+              key: keyof ScoringWeights;
+              label: string;
+              bg: string;
+              text: string;
+              bold: string;
+            }[] = [
+              { key: "frequency", label: "빈도", bg: "bg-orange-50", text: "text-orange-600", bold: "text-orange-800" },
+              { key: "coOccurrence", label: "동반출현", bg: "bg-pink-50", text: "text-pink-600", bold: "text-pink-800" },
+              { key: "ac", label: "AC값", bg: "bg-cyan-50", text: "text-cyan-600", bold: "text-cyan-800" },
+              { key: "carryover", label: "이월번호", bg: "bg-amber-50", text: "text-amber-600", bold: "text-amber-800" },
+              { key: "balance", label: "범대균형", bg: "bg-blue-50", text: "text-blue-600", bold: "text-blue-800" },
+              { key: "sumRange", label: "합계범위", bg: "bg-green-50", text: "text-green-600", bold: "text-green-800" },
+              { key: "oddEven", label: "홀짝균형", bg: "bg-purple-50", text: "text-purple-600", bold: "text-purple-800" },
+              { key: "consecutive", label: "연속번호", bg: "bg-rose-50", text: "text-rose-600", bold: "text-rose-800" },
+              { key: "lastDigit", label: "끝수다양", bg: "bg-indigo-50", text: "text-indigo-600", bold: "text-indigo-800" },
+            ];
+            return (
+              <div className="mb-6">
+                <div className="grid grid-cols-3 md:grid-cols-5 gap-2 mb-2">
+                  {weightItems.map(({ key, label, bg, text, bold }) => (
+                    <div key={key} className={`${bg} rounded-lg p-2 text-center`}>
+                      <div className={`text-xs ${text}`}>{label}</div>
+                      <div className="flex items-center justify-center gap-1 mt-1">
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="5"
+                          value={Math.round(weights[key] * 100)}
+                          onChange={(e) => {
+                            const val = Math.max(0, Math.min(100, parseInt(e.target.value) || 0));
+                            dispatch({
+                              type: "SET_FIELD",
+                              field: "weights",
+                              value: { ...weights, [key]: val / 100 },
+                            });
+                          }}
+                          className={`w-12 px-1 py-0.5 text-center text-sm font-bold ${bold} border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
+                        />
+                        <span className={`text-xs ${text}`}>%</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className={`text-sm text-center font-medium ${isValid ? "text-green-600" : "text-red-600"}`}>
+                  합계: {weightSum}% {!isValid && "(100%가 되어야 합니다)"}
+                  {isValid && (
+                    <button
+                      onClick={() =>
+                        dispatch({
+                          type: "SET_FIELD",
+                          field: "weights",
+                          value: { ...DEFAULT_WEIGHTS },
+                        })
+                      }
+                      className="ml-3 text-xs text-gray-400 hover:text-gray-600 underline"
+                    >
+                      기본값 복원
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
 
           {topCombos.length > 0 ? (
             <div className="space-y-3">{topCombosRendered}</div>
