@@ -754,6 +754,24 @@ export function calcAC(numbers: LottoNumber[]): number {
  * 8. 연속번호 (5%): 연속 쌍 1~2개 포함 시 보너스
  * 9. 끝수 다양성 (5%): 끝수가 다양할수록 높은 점수
  */
+export interface ScoringWeights {
+  frequency: number;      // 빈도 (기본 0.15)
+  coOccurrence: number;   // 동반출현 (기본 0.15)
+  ac: number;             // AC값 (기본 0.15)
+  carryover: number;      // 이월번호 (기본 0.15)
+  balance: number;        // 범대균형 (기본 0.10)
+  sumRange: number;       // 합계범위 (기본 0.10)
+  oddEven: number;        // 홀짝균형 (기본 0.10)
+  consecutive: number;    // 연속번호 (기본 0.05)
+  lastDigit: number;      // 끝수다양 (기본 0.05)
+}
+
+export const DEFAULT_WEIGHTS: ScoringWeights = {
+  frequency: 0.15, coOccurrence: 0.15, ac: 0.15, carryover: 0.15,
+  balance: 0.10, sumRange: 0.10, oddEven: 0.10,
+  consecutive: 0.05, lastDigit: 0.05,
+};
+
 export interface ScoredCombination {
   numbers: LottoNumber[];
   score: number;
@@ -848,7 +866,7 @@ function heapifyDown(heap: ScoredCombination[], i: number): void {
  * - 이월번호: 직전 2회차 고려 (정확도 향상)
  * - AC값: 7단계 세분화 (정확도 향상)
  */
-function scoreOneCombo(c: LottoNumber[], ctx: ScoringContext): ScoredCombination | null {
+function scoreOneCombo(c: LottoNumber[], ctx: ScoringContext, weights: ScoringWeights): ScoredCombination | null {
   // 합계 사전 필터 (극단값 조기 제외)
   const sum = c[0] + c[1] + c[2] + c[3] + c[4] + c[5];
   if (sum < 50 || sum > 240) return null;
@@ -951,15 +969,15 @@ function scoreOneCombo(c: LottoNumber[], ctx: ScoringContext): ScoredCombination
   const lastDigitScore = (popcount32(digitBits) / 6) * 100;
 
   const score =
-    frequencyScore * 0.15 +
-    coOccurrenceScore * 0.15 +
-    acScore * 0.15 +
-    carryoverScore * 0.15 +
-    balanceScore * 0.10 +
-    sumScore * 0.10 +
-    oddEvenScore * 0.10 +
-    consecutiveScore * 0.05 +
-    lastDigitScore * 0.05;
+    frequencyScore * weights.frequency +
+    coOccurrenceScore * weights.coOccurrence +
+    acScore * weights.ac +
+    carryoverScore * weights.carryover +
+    balanceScore * weights.balance +
+    sumScore * weights.sumRange +
+    oddEvenScore * weights.oddEven +
+    consecutiveScore * weights.consecutive +
+    lastDigitScore * weights.lastDigit;
 
   return {
     numbers: c,
@@ -1096,6 +1114,7 @@ export async function scoreCombinationsAsync(
   topN: number = 30,
   onProgress?: (progress: number) => void,
   chunkSize: number = 1000,
+  weights: ScoringWeights = DEFAULT_WEIGHTS,
 ): Promise<ScoreResult> {
   const ctx = buildScoringContext(draws);
   const total = combos.length;
@@ -1123,7 +1142,7 @@ export async function scoreCombinationsAsync(
       onProgress?.(Math.round((i / total) * 100));
     }
 
-    const result = scoreOneCombo(combos[i], ctx);
+    const result = scoreOneCombo(combos[i], ctx, weights);
     if (!result) continue;
 
     // 메인 heap에 추가
