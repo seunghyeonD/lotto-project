@@ -1482,6 +1482,15 @@ export default function ValidatePage() {
                           </div>
                         </div>
                       ))}
+                      <div className="rounded-lg p-2 flex items-center justify-center">
+                        <button
+                          onClick={handleScoreCombinations}
+                          disabled={loading || !isValid || filteredCombos.length === 0}
+                          className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors text-sm font-bold disabled:bg-gray-400 whitespace-nowrap"
+                        >
+                          {loading ? `${progress}%` : "조회"}
+                        </button>
+                      </div>
                     </div>
                     <div className={`text-sm text-center font-medium ${isValid ? "text-green-600" : "text-red-600"}`}>
                       합계: {weightSum}% {!isValid && "(100%가 되어야 합니다)"}
@@ -1504,20 +1513,6 @@ export default function ValidatePage() {
                 );
               })()}
             </div>
-          )}
-
-          {currentStep === 6 && (
-            <button
-              onClick={handleScoreCombinations}
-              disabled={loading || filteredCombos.length === 0 || Math.round(Object.values(weights).reduce((s, v) => s + v * 100, 0)) !== 100}
-              className="mt-4 px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-bold disabled:bg-gray-400"
-            >
-              {loading
-                ? `분석 중... ${progress}%`
-                : Math.round(Object.values(weights).reduce((s, v) => s + v * 100, 0)) !== 100
-                  ? "가중치 합계가 100%가 아닙니다"
-                  : "다음: 확률 기반 최종 추천"}
-            </button>
           )}
         </div>
       )}
@@ -1581,6 +1576,15 @@ export default function ValidatePage() {
                       </div>
                     </div>
                   ))}
+                  <div className="rounded-lg p-2 flex items-center justify-center">
+                    <button
+                      onClick={handleScoreCombinations}
+                      disabled={loading || !isValid}
+                      className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors text-sm font-bold disabled:bg-gray-400 whitespace-nowrap"
+                    >
+                      {loading ? `${progress}%` : "재조회"}
+                    </button>
+                  </div>
                 </div>
                 <div className={`text-sm text-center font-medium ${isValid ? "text-green-600" : "text-red-600"}`}>
                   합계: {weightSum}% {!isValid && "(100%가 되어야 합니다)"}
