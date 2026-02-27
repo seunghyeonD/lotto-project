@@ -1179,8 +1179,9 @@ function selectByRangeDistribution(
   // 점수순 정렬
   merged.sort((a, b) => b.score - a.score);
 
-  // 다양성 기반 선택: 모든 선택된 조합과 겹침 maxShared 이하만 허용
+  // 1차: 다양성 기반 선택 (겹침 maxShared 이하만 허용)
   const selected: ScoredCombination[] = [];
+  const selectedSet = new Set<string>();
 
   for (const candidate of merged) {
     if (selected.length >= topN) break;
@@ -1195,6 +1196,41 @@ function selectByRangeDistribution(
 
     if (!tooSimilar) {
       selected.push(candidate);
+      selectedSet.add(comboKey(candidate));
+    }
+  }
+
+  // 2차: 다양성 조건으로 topN을 못 채운 경우, maxShared를 완화하며 채움
+  if (selected.length < topN) {
+    for (let relaxed = maxShared + 1; relaxed <= 4 && selected.length < topN; relaxed++) {
+      for (const candidate of merged) {
+        if (selected.length >= topN) break;
+        if (selectedSet.has(comboKey(candidate))) continue;
+
+        let tooSimilar = false;
+        for (const sel of selected) {
+          if (countSharedNumbers(candidate.numbers, sel.numbers) > relaxed) {
+            tooSimilar = true;
+            break;
+          }
+        }
+
+        if (!tooSimilar) {
+          selected.push(candidate);
+          selectedSet.add(comboKey(candidate));
+        }
+      }
+    }
+  }
+
+  // 3차: 그래도 못 채우면 고득점 순으로 나머지 채움
+  if (selected.length < topN) {
+    for (const candidate of merged) {
+      if (selected.length >= topN) break;
+      if (!selectedSet.has(comboKey(candidate))) {
+        selected.push(candidate);
+        selectedSet.add(comboKey(candidate));
+      }
     }
   }
 
