@@ -19,6 +19,7 @@ import {
   getFrequencyTable,
   filterCandidateNumbers,
   splitAndCombine,
+  filterByConsecutiveAndRange,
   filterByHistoricalMatch,
   groupBySharedNumbersAsync,
   groupByExactSharedCountAsync,
@@ -78,7 +79,14 @@ interface ValidateState {
   excludedNumbers: Set<LottoNumberType>;
   generatedCombos: LottoNumberType[][];
   filteredCombos: LottoNumberType[][];
-  filterStats: { before: number; after: number; excluded: number };
+  filterStats: {
+    before: number;
+    after: number;
+    excluded: number;
+    consecutiveRemoved: number;
+    rangeRemoved: number;
+    historicalRemoved: number;
+  };
   groups5: CombinationGroup[];
   groups4: CombinationGroup[];
   groups3: CombinationGroup[];
@@ -107,7 +115,7 @@ const initialState: ValidateState = {
   excludedNumbers: new Set(),
   generatedCombos: [],
   filteredCombos: [],
-  filterStats: { before: 0, after: 0, excluded: 0 },
+  filterStats: { before: 0, after: 0, excluded: 0, consecutiveRemoved: 0, rangeRemoved: 0, historicalRemoved: 0 },
   groups5: [],
   groups4: [],
   groups3: [],
@@ -140,7 +148,14 @@ type ValidateAction =
       type: "COMBINATION_SUCCESS";
       generatedCombos: LottoNumberType[][];
       filteredCombos: LottoNumberType[][];
-      filterStats: { before: number; after: number; excluded: number };
+      filterStats: {
+        before: number;
+        after: number;
+        excluded: number;
+        consecutiveRemoved: number;
+        rangeRemoved: number;
+        historicalRemoved: number;
+      };
     }
   | {
       type: "GROUPING_SUCCESS";
@@ -513,15 +528,26 @@ export default function ValidatePage() {
 
     try {
       const combos = splitAndCombine(allCandidates, 15);
-      const result = filterByHistoricalMatch(combos, draws, 3);
+
+      // 1) 연속번호 + 범대 제약 필터
+      const crFilter = filterByConsecutiveAndRange(combos);
+
+      // 2) 과거 100회 일치 필터
+      const histResult = filterByHistoricalMatch(crFilter.filtered, draws, 3);
+
+      const totalExcluded = crFilter.stats.consecutiveRemoved + crFilter.stats.rangeRemoved + (histResult.beforeCount - histResult.afterCount);
+
       dispatch({
         type: "COMBINATION_SUCCESS",
         generatedCombos: combos,
-        filteredCombos: result.filtered,
+        filteredCombos: histResult.filtered,
         filterStats: {
-          before: result.beforeCount,
-          after: result.afterCount,
-          excluded: result.beforeCount - result.afterCount,
+          before: combos.length,
+          after: histResult.afterCount,
+          excluded: totalExcluded,
+          consecutiveRemoved: crFilter.stats.consecutiveRemoved,
+          rangeRemoved: crFilter.stats.rangeRemoved,
+          historicalRemoved: histResult.beforeCount - histResult.afterCount,
         },
       });
     } catch (err) {
@@ -619,7 +645,7 @@ export default function ValidatePage() {
       const { top, pool } = await scoreCombinationsAsync(
         filteredCombos,
         draws,
-        50,
+        100,
         (p) => dispatch({ type: "SET_PROGRESS", progress: p }),
         1000,
         weights,
@@ -734,11 +760,27 @@ export default function ValidatePage() {
       }
     };
 
-    const ws1 = XLSX.utils.json_to_sheet(combosToRows(topCombos));
-    applySheetStyle(ws1, topCombos.length, "FF8C00");
+    // Sheet1: 추천 조합 - 첫번째 번호 기준 정렬
+    const sortedTopCombos = [...topCombos].sort((a, b) => {
+      const rangeA = a.numbers[0] <= 10 ? 0 : a.numbers[0] <= 20 ? 1 : a.numbers[0] <= 30 ? 2 : a.numbers[0] <= 40 ? 3 : 4;
+      const rangeB = b.numbers[0] <= 10 ? 0 : b.numbers[0] <= 20 ? 1 : b.numbers[0] <= 30 ? 2 : b.numbers[0] <= 40 ? 3 : 4;
+      if (rangeA !== rangeB) return rangeA - rangeB;
+      return a.numbers[0] - b.numbers[0];
+    });
 
-    const ws2 = XLSX.utils.json_to_sheet(combosToRows(allScoredCombos));
-    applySheetStyle(ws2, allScoredCombos.length, "4472C4");
+    const ws1 = XLSX.utils.json_to_sheet(combosToRows(sortedTopCombos));
+    applySheetStyle(ws1, sortedTopCombos.length, "FF8C00");
+
+    // Sheet2: 전체 후보 - 첫번째 번호 기준 정렬
+    const sortedAllCombos = [...allScoredCombos].sort((a, b) => {
+      const rangeA = a.numbers[0] <= 10 ? 0 : a.numbers[0] <= 20 ? 1 : a.numbers[0] <= 30 ? 2 : a.numbers[0] <= 40 ? 3 : 4;
+      const rangeB = b.numbers[0] <= 10 ? 0 : b.numbers[0] <= 20 ? 1 : b.numbers[0] <= 30 ? 2 : b.numbers[0] <= 40 ? 3 : 4;
+      if (rangeA !== rangeB) return rangeA - rangeB;
+      return a.numbers[0] - b.numbers[0];
+    });
+
+    const ws2 = XLSX.utils.json_to_sheet(combosToRows(sortedAllCombos));
+    applySheetStyle(ws2, sortedAllCombos.length, "4472C4");
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws1, "추천 조합");
@@ -1155,7 +1197,7 @@ export default function ValidatePage() {
             Step 4-5: 조합 생성 및 과거 데이터 비교
           </h2>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
             <div className="bg-blue-50 rounded-lg p-4 text-center">
               <div className="text-sm text-blue-600">생성된 조합 수</div>
               <div className="text-2xl font-bold text-blue-800">
@@ -1166,13 +1208,31 @@ export default function ValidatePage() {
                 {Math.ceil(allCandidates.length / 15)} 그룹
               </div>
             </div>
+            <div className="bg-orange-50 rounded-lg p-4 text-center">
+              <div className="text-sm text-orange-600">연속번호 제거</div>
+              <div className="text-2xl font-bold text-orange-800">
+                {filterStats.consecutiveRemoved.toLocaleString()}개
+              </div>
+              <div className="text-xs text-orange-500">
+                연속 3개 이상 포함 조합
+              </div>
+            </div>
+            <div className="bg-purple-50 rounded-lg p-4 text-center">
+              <div className="text-sm text-purple-600">범대초과 제거</div>
+              <div className="text-2xl font-bold text-purple-800">
+                {filterStats.rangeRemoved.toLocaleString()}개
+              </div>
+              <div className="text-xs text-purple-500">
+                범대 4개+ / 범대내 연속3
+              </div>
+            </div>
             <div className="bg-red-50 rounded-lg p-4 text-center">
-              <div className="text-sm text-red-600">제외된 조합 수</div>
+              <div className="text-sm text-red-600">과거일치 제거</div>
               <div className="text-2xl font-bold text-red-800">
-                {filterStats.excluded.toLocaleString()}개
+                {filterStats.historicalRemoved.toLocaleString()}개
               </div>
               <div className="text-xs text-red-500">
-                과거 100회와 4개 이상 일치
+                과거 100회와 3개 이상 일치
               </div>
             </div>
             <div className="bg-green-50 rounded-lg p-4 text-center">

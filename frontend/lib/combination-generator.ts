@@ -267,25 +267,127 @@ function combinations(arr: LottoNumber[], k: number): LottoNumber[][] {
 }
 
 /**
- * 15개 단위로 쪼개서 C(15,6) 조합 생성
+ * 연속 3개 이상 번호가 있는지 체크
+ * 예: [1,2,3,...] → true, [1,2,4,...] → false
+ * combo는 정렬된 상태여야 함
  */
-/**
- * 범대별 최대 2개 제약 체크
- * 기획서: "열중에 단번대부터 사십번대중 최대 2개까지 나올수 있다"
- */
-function isValidRangeDistribution(combo: LottoNumber[]): boolean {
-  const ranges = new Uint8Array(5); // 단, 십, 이, 삼, 사
-  for (const n of combo) {
-    if (n <= 10) ranges[0]++;
-    else if (n <= 20) ranges[1]++;
-    else if (n <= 30) ranges[2]++;
-    else if (n <= 40) ranges[3]++;
-    else ranges[4]++;
-    if (ranges[0] > 2 || ranges[1] > 2 || ranges[2] > 2 || ranges[3] > 2 || ranges[4] > 2) {
-      return false;
+export function hasThreeOrMoreConsecutive(combo: LottoNumber[]): boolean {
+  let streak = 1;
+  for (let i = 1; i < combo.length; i++) {
+    if (combo[i] - combo[i - 1] === 1) {
+      streak++;
+      if (streak >= 3) return true;
+    } else {
+      streak = 1;
     }
   }
+  return false;
+}
+
+/**
+ * 같은 범대 내 번호들이 연속 3개인지 체크
+ * 예: 범대 내 [21,22,23] → true, [21,23,29] → false
+ */
+function hasConsecutiveThreeInRange(nums: number[]): boolean {
+  if (nums.length < 3) return false;
+  const sorted = [...nums].sort((a, b) => a - b);
+  let streak = 1;
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i] - sorted[i - 1] === 1) {
+      streak++;
+      if (streak >= 3) return true;
+    } else {
+      streak = 1;
+    }
+  }
+  return false;
+}
+
+/**
+ * 범대별 분포 제약 체크 (개선된 버전)
+ * - 범대별 최대 3개 허용
+ * - 같은 범대 내 3개가 연속이면 불허 (예: 21,22,23)
+ * - 4개 이상은 무조건 불허
+ * - 전체 조합에서 연속 3개 이상 불허
+ */
+function isValidRangeDistribution(combo: LottoNumber[]): boolean {
+  // 범대별 번호 수집
+  const rangeNums: number[][] = [[], [], [], [], []]; // 단, 십, 이, 삼, 사
+  for (const n of combo) {
+    if (n <= 10) rangeNums[0].push(n);
+    else if (n <= 20) rangeNums[1].push(n);
+    else if (n <= 30) rangeNums[2].push(n);
+    else if (n <= 40) rangeNums[3].push(n);
+    else rangeNums[4].push(n);
+  }
+
+  for (const nums of rangeNums) {
+    // 4개 이상이면 불허
+    if (nums.length >= 4) return false;
+    // 3개인 경우, 범대 내 연속 3개이면 불허
+    if (nums.length === 3 && hasConsecutiveThreeInRange(nums)) return false;
+  }
+
+  // 전체 조합에서 연속 3개 이상 불허
+  if (hasThreeOrMoreConsecutive(combo)) return false;
+
   return true;
+}
+
+/**
+ * 연속번호 + 범대 제약 통합 필터
+ * splitAndCombine 후 추가 필터링용
+ */
+export function filterByConsecutiveAndRange(combos: LottoNumber[][]): {
+  filtered: LottoNumber[][];
+  stats: { before: number; consecutiveRemoved: number; rangeRemoved: number; after: number };
+} {
+  let consecutiveRemoved = 0;
+  let rangeRemoved = 0;
+  const filtered: LottoNumber[][] = [];
+
+  for (const combo of combos) {
+    // 연속 3개 이상 체크
+    if (hasThreeOrMoreConsecutive(combo)) {
+      consecutiveRemoved++;
+      continue;
+    }
+
+    // 범대별 제약 체크 (4개 이상 or 범대 내 연속 3개)
+    const rangeNums: number[][] = [[], [], [], [], []];
+    for (const n of combo) {
+      if (n <= 10) rangeNums[0].push(n);
+      else if (n <= 20) rangeNums[1].push(n);
+      else if (n <= 30) rangeNums[2].push(n);
+      else if (n <= 40) rangeNums[3].push(n);
+      else rangeNums[4].push(n);
+    }
+
+    let rangeInvalid = false;
+    for (const nums of rangeNums) {
+      if (nums.length >= 4 || (nums.length === 3 && hasConsecutiveThreeInRange(nums))) {
+        rangeInvalid = true;
+        break;
+      }
+    }
+
+    if (rangeInvalid) {
+      rangeRemoved++;
+      continue;
+    }
+
+    filtered.push(combo);
+  }
+
+  return {
+    filtered,
+    stats: {
+      before: combos.length,
+      consecutiveRemoved,
+      rangeRemoved,
+      after: filtered.length,
+    },
+  };
 }
 
 /**
@@ -1120,7 +1222,8 @@ export async function scoreCombinationsAsync(
   const total = combos.length;
 
   // 번호대별 별도 pool 유지 (단번대/십번대 포함 조합이 점수가 낮아도 보존)
-  const poolSize = topN * 10;
+  // poolSize를 300~500 범위로 조절 (topN에 비례하되 최소 300)
+  const poolSize = Math.max(300, topN * 5);
   const rangePoolSize = Math.ceil(topN * 4); // 각 번호대별 pool 크기
 
   // 메인 pool (전체 고득점)
