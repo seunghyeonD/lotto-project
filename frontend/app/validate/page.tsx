@@ -649,6 +649,7 @@ export default function ValidatePage() {
         (p) => dispatch({ type: "SET_PROGRESS", progress: p }),
         1000,
         weights,
+        filteredCombos.length, // 전체 후보를 pool에 담기 위해 poolSize = 전체 수
       );
       dispatch({
         type: "SCORE_SUCCESS",

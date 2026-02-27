@@ -1217,13 +1217,14 @@ export async function scoreCombinationsAsync(
   onProgress?: (progress: number) => void,
   chunkSize: number = 1000,
   weights: ScoringWeights = DEFAULT_WEIGHTS,
+  customPoolSize?: number,
 ): Promise<ScoreResult> {
   const ctx = buildScoringContext(draws);
   const total = combos.length;
 
   // 번호대별 별도 pool 유지 (단번대/십번대 포함 조합이 점수가 낮아도 보존)
-  // poolSize를 300~500 범위로 조절 (topN에 비례하되 최소 300)
-  const poolSize = Math.max(300, topN * 5);
+  // customPoolSize가 주어지면 그대로 사용, 아니면 기본값
+  const poolSize = customPoolSize ?? Math.max(300, topN * 5);
   const rangePoolSize = Math.ceil(topN * 4); // 각 번호대별 pool 크기
 
   // 메인 pool (전체 고득점)
