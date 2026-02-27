@@ -391,51 +391,51 @@ export function filterByConsecutiveAndRange(combos: LottoNumber[][]): {
 }
 
 /**
- * 범대별로 분산 그룹핑 후 C(15,6) 조합 생성
- * 순차 그룹핑 대신 라운드로빈으로 각 그룹에 모든 범대가 포함되도록 분배
- * → 범대별 최대 2개 제약을 만족하는 조합이 생성될 수 있음
+ * 전체 후보 번호에서 C(n,6) 조합을 생성하고 범대 분포 필터를 인라인 적용
+ * 36개 → C(36,6) = 1,947,792개 생성, 범대 필터 통과분만 반환
  */
+export interface SplitAndCombineResult {
+  combos: LottoNumber[][];
+  totalGenerated: number;    // C(n,6) 전체 조합 수
+  rangeFiltered: number;     // 범대 필터로 제거된 수
+}
+
 export function splitAndCombine(
   numbers: LottoNumber[],
-  groupSize: number = 15,
-): LottoNumber[][] {
-  // 범대별로 분류
-  const byRange: LottoNumber[][] = [[], [], [], [], []]; // 단, 십, 이, 삼, 사
-  for (const n of numbers) {
-    if (n <= 10) byRange[0].push(n);
-    else if (n <= 20) byRange[1].push(n);
-    else if (n <= 30) byRange[2].push(n);
-    else if (n <= 40) byRange[3].push(n);
-    else byRange[4].push(n);
-  }
-
-  // 라운드로빈으로 그룹에 분배 (각 그룹에 모든 범대가 골고루 들어감)
+  _groupSize: number = 15,
+): SplitAndCombineResult {
   const sorted = [...numbers].sort((a, b) => a - b);
-  const numGroups = Math.ceil(sorted.length / groupSize);
-  const groups: LottoNumber[][] = Array.from({ length: numGroups }, () => []);
-
-  let groupIdx = 0;
-  for (const range of byRange) {
-    for (const num of range) {
-      groups[groupIdx % numGroups].push(num);
-      groupIdx++;
-    }
-  }
+  const n = sorted.length;
+  if (n < 6) return { combos: [], totalGenerated: 0, rangeFiltered: 0 };
 
   const allCombinations: LottoNumber[][] = [];
+  let totalGenerated = 0;
 
-  for (const group of groups) {
-    if (group.length < 6) continue;
-    group.sort((a, b) => a - b);
-    const combos = combinations(group, 6);
-    for (const combo of combos) {
-      if (isValidRangeDistribution(combo)) {
-        allCombinations.push(combo);
+  // 6중 루프로 C(n,6) 생성 — combinations() 함수보다 메모리 효율적
+  // 생성과 동시에 범대 필터 적용하여 불필요한 조합을 저장하지 않음
+  for (let a = 0; a < n - 5; a++) {
+    for (let b = a + 1; b < n - 4; b++) {
+      for (let c = b + 1; c < n - 3; c++) {
+        for (let d = c + 1; d < n - 2; d++) {
+          for (let e = d + 1; e < n - 1; e++) {
+            for (let f = e + 1; f < n; f++) {
+              totalGenerated++;
+              const combo: LottoNumber[] = [sorted[a], sorted[b], sorted[c], sorted[d], sorted[e], sorted[f]];
+              if (isValidRangeDistribution(combo)) {
+                allCombinations.push(combo);
+              }
+            }
+          }
+        }
       }
     }
   }
 
-  return allCombinations;
+  return {
+    combos: allCombinations,
+    totalGenerated,
+    rangeFiltered: totalGenerated - allCombinations.length,
+  };
 }
 
 /**
