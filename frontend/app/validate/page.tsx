@@ -323,6 +323,16 @@ export default function ValidatePage() {
     [excludedNumbers],
   );
 
+  // 번호별 출현 횟수 맵 (회차별 테이블에서 사용)
+  const freqMap = useMemo(() => {
+    const map: Record<number, number> = {};
+    for (let i = 1; i <= 45; i++) map[i] = 0;
+    for (const draw of draws) {
+      for (const num of draw.numbers) map[num] = (map[num] || 0) + 1;
+    }
+    return map;
+  }, [draws]);
+
   const frequencyTableRows = useMemo(
     () =>
       frequencyTable.map((row, idx) => {
@@ -1047,12 +1057,52 @@ export default function ValidatePage() {
         </div>
       )}
 
-      {/* Step 2: 100주 빈도순 정리표 */}
+      {/* Step 2: 100주 DATA 정리 + 빈도순 정리표 */}
       {currentStep >= 2 && (
         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
           <h2 className="text-xl font-bold text-gray-800 mb-4">
             Step 2: {draws.length}주 DATA 빈도순 정리표
           </h2>
+
+          {/* 회차별 당첨번호 테이블 (번호 + 출현횟수) */}
+          <details className="mb-6">
+            <summary className="cursor-pointer text-lg font-bold text-gray-700 mb-2 select-none hover:text-blue-600">
+              ☞ {draws.length}주 DATA를 정리하면
+            </summary>
+            <div className="overflow-x-auto mt-2 max-h-[600px] overflow-y-auto">
+              <table className="text-sm border-collapse">
+                <thead className="sticky top-0 z-10">
+                  <tr>
+                    <th className="border border-gray-400 bg-yellow-300 px-4 py-1.5 text-center font-bold">회차</th>
+                    <th className="border border-gray-400 bg-yellow-300 px-4 py-1.5 text-center font-bold">1번</th>
+                    <th className="border border-gray-400 bg-yellow-300 px-4 py-1.5 text-center font-bold">2번</th>
+                    <th className="border border-gray-400 bg-yellow-300 px-4 py-1.5 text-center font-bold">3번</th>
+                    <th className="border border-gray-400 bg-yellow-300 px-4 py-1.5 text-center font-bold">4번</th>
+                    <th className="border border-gray-400 bg-yellow-300 px-4 py-1.5 text-center font-bold">5번</th>
+                    <th className="border border-gray-400 bg-yellow-300 px-4 py-1.5 text-center font-bold">6번</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {draws.map((draw, idx) => {
+                    const sorted = [...draw.numbers].sort((a, b) => a - b);
+                    return (
+                      <tr key={draw.round} className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                        <td className="border border-gray-400 px-4 py-1.5 text-center font-bold">{draw.round}</td>
+                        {sorted.map((num, ni) => (
+                          <td key={ni} className="border border-gray-400 px-3 py-1.5 text-center">
+                            <span className="font-bold">{num}</span>
+                            <span className="text-gray-400 text-xs ml-1">({freqMap[num]})</span>
+                          </td>
+                        ))}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </details>
+
+          {/* 빈도순 정리표 */}
           <div className="overflow-x-auto">
             <table className="w-full text-sm border-collapse">
               <thead>
