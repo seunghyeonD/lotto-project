@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
 
     // 후보가 부족하면 15개씩 분할 조합
     if (combos.length === 0 && allCandidates.length >= 6) {
-      combos = splitAndCombine(allCandidates, 15);
+      combos = splitAndCombine(allCandidates, 15).combos;
     }
 
     // 과거 당첨번호와 비교하여 필터링
