@@ -86,8 +86,8 @@ export default function AnalyzePage() {
   const isRoundMode = selectedRound !== null;
 
   const handleValidate = async () => {
-    if (selectedNumbers.length === 0 || selectedNumbers.length > 15) {
-      setError('1개에서 15개 사이의 번호를 선택해주세요.');
+    if (selectedNumbers.length === 0 || selectedNumbers.length > 10) {
+      setError('1개에서 10개 사이의 번호를 선택해주세요.');
       return;
     }
 
@@ -171,7 +171,7 @@ export default function AnalyzePage() {
             <NumberPicker
               selectedNumbers={selectedNumbers}
               onChange={isRoundMode ? () => {} : setSelectedNumbers}
-              maxSelection={15}
+              maxSelection={10}
               onRandom={(numbers) => {
                 setSelectedRound(null);
                 setResults100([]);
@@ -238,7 +238,7 @@ export default function AnalyzePage() {
 
             <button
               onClick={handleValidate}
-              disabled={loading || isRoundMode || selectedNumbers.length === 0 || selectedNumbers.length > 15}
+              disabled={loading || isRoundMode || selectedNumbers.length === 0 || selectedNumbers.length > 10}
               className="w-full px-6 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors font-bold disabled:bg-gray-400 disabled:cursor-not-allowed"
             >
               {loading ? '검증 중...' : isRoundMode ? '회차 선택 시 자동 검증됨' : '검증 시작'}
