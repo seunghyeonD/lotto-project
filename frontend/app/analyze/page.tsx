@@ -329,6 +329,187 @@ export default function AnalyzePage() {
     }
   };
 
+  const handleComboExcelDownload = async () => {
+    if (selectedNumbers.length < 6) {
+      setError('6개 이상의 번호를 선택해주세요.');
+      return;
+    }
+
+    try {
+      setExcelLoading(true);
+      setExcelProgress('데이터 로딩 중...');
+
+      // 최근 100회차 데이터 가져오기
+      const recentDraws = await lottoApi.getRecentDraws(100);
+      recentDraws.sort((a, b) => b.round - a.round);
+
+      setExcelProgress('조합 생성 중...');
+
+      // C(n, 6) 조합 생성
+      const nums = [...selectedNumbers].sort((a, b) => a - b);
+      const combos: number[][] = [];
+      const n = nums.length;
+
+      for (let a = 0; a < n - 5; a++)
+        for (let b = a + 1; b < n - 4; b++)
+          for (let c = b + 1; c < n - 3; c++)
+            for (let d = c + 1; d < n - 2; d++)
+              for (let e = d + 1; e < n - 1; e++)
+                for (let f = e + 1; f < n; f++)
+                  combos.push([nums[a], nums[b], nums[c], nums[d], nums[e], nums[f]]);
+
+      setExcelProgress(`${combos.length}개 조합 일치통계 계산 중...`);
+
+      // 각 조합별 최근 100회와의 일치 통계 계산
+      const comboStats: { combo: number[]; counts: number[] }[] = [];
+      for (const combo of combos) {
+        const counts = [0, 0, 0, 0, 0, 0, 0]; // 0~6개 일치
+        for (const draw of recentDraws) {
+          const drawNums = draw.numbers.slice(0, 6);
+          const matchCount = combo.filter(n => drawNums.includes(n)).length;
+          counts[matchCount]++;
+        }
+        comboStats.push({ combo, counts });
+      }
+
+      setExcelProgress('엑셀 생성 중...');
+
+      const wb = XLSX.utils.book_new();
+
+      const headerStyle = {
+        font: { bold: true, color: { rgb: 'FFFFFF' } },
+        fill: { fgColor: { rgb: 'FF0000' } },
+        alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+        border: {
+          top: { style: 'thin' as const }, bottom: { style: 'thin' as const },
+          left: { style: 'thin' as const }, right: { style: 'thin' as const },
+        },
+      };
+
+      const subHeaderStyle = {
+        font: { bold: true },
+        alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+        border: {
+          top: { style: 'thin' as const }, bottom: { style: 'thin' as const },
+          left: { style: 'thin' as const }, right: { style: 'thin' as const },
+        },
+      };
+
+      const cellStyle = {
+        alignment: { horizontal: 'center' as const },
+        border: {
+          top: { style: 'thin' as const }, bottom: { style: 'thin' as const },
+          left: { style: 'thin' as const }, right: { style: 'thin' as const },
+        },
+      };
+
+      const sumStyle = {
+        alignment: { horizontal: 'center' as const },
+        fill: { fgColor: { rgb: 'FFFF00' } },
+        border: {
+          top: { style: 'thin' as const }, bottom: { style: 'thin' as const },
+          left: { style: 'thin' as const }, right: { style: 'thin' as const },
+        },
+      };
+
+      const comboStyle = {
+        font: { bold: true },
+        alignment: { horizontal: 'center' as const },
+        fill: { fgColor: { rgb: 'E0F0FF' } },
+        border: {
+          top: { style: 'thin' as const }, bottom: { style: 'thin' as const },
+          left: { style: 'thin' as const }, right: { style: 'thin' as const },
+        },
+      };
+
+      // 워크시트 데이터
+      const wsData: any[][] = [];
+
+      // 최근 회차 범위 표시
+      const latestDraw = recentDraws[0];
+      const oldestDraw = recentDraws[recentDraws.length - 1];
+
+      // Row 0: 헤더
+      wsData.push([
+        '', '조합 번호', '', '', '', '', '',
+        `최근 100회 일치통계 (${oldestDraw.round}~${latestDraw.round}회)`, '', '', '', '', '', '', '',
+      ]);
+
+      // Row 1: 서브 헤더
+      wsData.push([
+        'No', 'N1', 'N2', 'N3', 'N4', 'N5', 'N6',
+        '0', '1', '2', '3', '4', '5', '6', '합',
+      ]);
+
+      // Data rows
+      for (let i = 0; i < comboStats.length; i++) {
+        const { combo, counts } = comboStats[i];
+        const rowIdx = i + 3; // Excel 1-based row
+        wsData.push([
+          i + 1,
+          combo[0], combo[1], combo[2], combo[3], combo[4], combo[5],
+          counts[0] || '',
+          counts[1] || '',
+          counts[2] || '',
+          counts[3] || '',
+          counts[4] ? counts[4] : (counts[4] === 0 ? '-' : ''),
+          counts[5] ? counts[5] : (counts[5] === 0 ? '-' : ''),
+          counts[6] ? counts[6] : (counts[6] === 0 ? '-' : ''),
+          { f: `SUM(H${rowIdx}:N${rowIdx})` },
+        ]);
+      }
+
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+      // 열 너비
+      ws['!cols'] = [
+        { wch: 5 },  // No
+        { wch: 5 }, { wch: 5 }, { wch: 5 }, { wch: 5 }, { wch: 5 }, { wch: 5 }, // N1~N6
+        { wch: 6 }, { wch: 6 }, { wch: 6 }, { wch: 6 }, { wch: 6 }, { wch: 6 }, { wch: 6 }, // 0~6
+        { wch: 6 },  // 합
+      ];
+
+      // 머지: 조합 번호 (B1:G1), 일치통계 (H1:O1)
+      ws['!merges'] = [
+        { s: { r: 0, c: 1 }, e: { r: 0, c: 6 } },
+        { s: { r: 0, c: 7 }, e: { r: 0, c: 14 } },
+      ];
+
+      // 스타일 적용
+      const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+      for (let R = range.s.r; R <= range.e.r; R++) {
+        for (let C = range.s.c; C <= range.e.c; C++) {
+          const addr = XLSX.utils.encode_cell({ r: R, c: C });
+          if (!ws[addr]) ws[addr] = { v: '', t: 's' };
+
+          if (R === 0 && C >= 7) {
+            ws[addr].s = headerStyle;
+          } else if (R === 0) {
+            ws[addr].s = subHeaderStyle;
+          } else if (R === 1) {
+            ws[addr].s = subHeaderStyle;
+          } else if (C >= 1 && C <= 6) {
+            ws[addr].s = comboStyle;
+          } else if (C === 14) {
+            ws[addr].s = sumStyle;
+          } else {
+            ws[addr].s = cellStyle;
+          }
+        }
+      }
+
+      XLSX.utils.book_append_sheet(wb, ws, '조합 일치통계');
+      XLSX.writeFile(wb, `로또_조합_일치통계_${nums.join('-')}.xlsx`);
+
+      setExcelProgress('');
+    } catch (err) {
+      setError('엑셀 다운로드에 실패했습니다.');
+      console.error(err);
+    } finally {
+      setExcelLoading(false);
+    }
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-8">
@@ -454,6 +635,16 @@ export default function AnalyzePage() {
                 className="w-full mt-3 px-6 py-3 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors font-bold disabled:bg-gray-400 disabled:cursor-not-allowed"
               >
                 {excelLoading ? excelProgress || '처리 중...' : '전체 회차 일치통계 엑셀 다운로드'}
+              </button>
+            )}
+
+            {!isRoundMode && selectedNumbers.length >= 6 && (
+              <button
+                onClick={handleComboExcelDownload}
+                disabled={excelLoading}
+                className="w-full mt-3 px-6 py-3 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors font-bold disabled:bg-gray-400 disabled:cursor-not-allowed"
+              >
+                {excelLoading ? excelProgress || '처리 중...' : `조합 일치통계 엑셀 다운로드 (C(${selectedNumbers.length},6) = ${Math.round((() => { const n = selectedNumbers.length; let r = 1; for (let i = 0; i < 6; i++) r = r * (n - i) / (i + 1); return r; })())}개)`}
               </button>
             )}
 
