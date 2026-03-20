@@ -69,8 +69,11 @@ export default function AnalyzePage() {
         ]);
         setResults100(res100);
         setResults200(res200);
-        setResults([]);
+      } else {
+        setResults100([]);
+        setResults200([]);
       }
+      setResults([]);
     } catch (err) {
       setError('회차 데이터를 불러오는데 실패했습니다.');
       console.error(err);
