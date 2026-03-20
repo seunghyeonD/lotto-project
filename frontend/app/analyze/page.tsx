@@ -6,9 +6,11 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import * as XLSX from 'xlsx-js-style';
 import { lottoApi } from '@/lib/api';
 import {
   CombinationValidationResult,
+  LottoDrawResult,
   LottoNumber as LottoNumberType,
 } from '@/types/lotto';
 import { NumberPicker } from '@/components/NumberPicker';
@@ -125,6 +127,204 @@ export default function AnalyzePage() {
   const matchStats = results.length > 0 ? getMatchStats(results) : {};
   const matchStats100 = results100.length > 0 ? getMatchStats(results100) : {};
   const matchStats200 = results200.length > 0 ? getMatchStats(results200) : {};
+
+  const [excelLoading, setExcelLoading] = useState(false);
+  const [excelProgress, setExcelProgress] = useState('');
+
+  const handleExcelDownload = async () => {
+    try {
+      setExcelLoading(true);
+      setExcelProgress('데이터 로딩 중...');
+
+      const allDraws = await lottoApi.getAllDraws();
+      const drawMap = new Map<number, LottoDrawResult>();
+      for (const d of allDraws) drawMap.set(d.round, d);
+
+      // 1회부터 최신 회차까지 전체 범위
+      const maxRound = Math.max(...allDraws.map(d => d.round), latestRound);
+
+      setExcelProgress('일치통계 계산 중...');
+
+      // 1회차: 2002-12-07 (토), 이후 매주 7일 간격
+      const getDrawDate = (r: number) => {
+        const first = new Date(2002, 11, 7); // 2002-12-07
+        const d = new Date(first.getTime() + (r - 1) * 7 * 24 * 60 * 60 * 1000);
+        return d.toISOString().slice(0, 10);
+      };
+
+      // 각 회차별 이전 100회와의 일치 통계 계산
+      const rows: { round: number; date: string; counts: number[]; hasData: boolean }[] = [];
+      for (let round = 1; round <= maxRound; round++) {
+        const draw = drawMap.get(round);
+        if (!draw) {
+          rows.push({ round, date: getDrawDate(round), counts: [], hasData: false });
+          continue;
+        }
+
+        const nums = draw.numbers.slice(0, 6);
+        const counts = [0, 0, 0, 0, 0, 0, 0]; // 0~6개 일치
+
+        // 이전 100회차
+        let compared = 0;
+        for (let prev = round - 1; prev >= Math.max(1, round - 100); prev--) {
+          const prevDraw = drawMap.get(prev);
+          if (!prevDraw) continue;
+          const prevNums = prevDraw.numbers.slice(0, 6);
+          const matchCount = nums.filter(n => prevNums.includes(n)).length;
+          counts[matchCount]++;
+          compared++;
+        }
+
+        rows.push({
+          round: draw.round,
+          date: draw.drawDate,
+          counts: compared > 0 ? counts : [],
+          hasData: true,
+        });
+      }
+
+      setExcelProgress('엑셀 생성 중...');
+
+      const wb = XLSX.utils.book_new();
+
+      // 헤더 스타일
+      const headerStyle = {
+        font: { bold: true, color: { rgb: 'FFFFFF' } },
+        fill: { fgColor: { rgb: 'FF0000' } },
+        alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+        border: {
+          top: { style: 'thin' as const },
+          bottom: { style: 'thin' as const },
+          left: { style: 'thin' as const },
+          right: { style: 'thin' as const },
+        },
+      };
+
+      const subHeaderStyle = {
+        font: { bold: true },
+        alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+        border: {
+          top: { style: 'thin' as const },
+          bottom: { style: 'thin' as const },
+          left: { style: 'thin' as const },
+          right: { style: 'thin' as const },
+        },
+      };
+
+      const cellStyle = {
+        alignment: { horizontal: 'center' as const },
+        border: {
+          top: { style: 'thin' as const },
+          bottom: { style: 'thin' as const },
+          left: { style: 'thin' as const },
+          right: { style: 'thin' as const },
+        },
+      };
+
+      const sumStyle = {
+        alignment: { horizontal: 'center' as const },
+        fill: { fgColor: { rgb: 'FFFF00' } },
+        border: {
+          top: { style: 'thin' as const },
+          bottom: { style: 'thin' as const },
+          left: { style: 'thin' as const },
+          right: { style: 'thin' as const },
+        },
+      };
+
+      // 워크시트 데이터 구성
+      const wsData: any[][] = [];
+
+      // Row 0: 번호정리 + 100주 동안 당첨번호중 나온 갯수 의 수
+      wsData.push(['', '번호정리', '', '100주 동안 당첨번호중 나온 갯수 의 수', '', '', '', '', '', '', '']);
+
+      // Row 1: 회차, 일자, 0~6, 합
+      wsData.push(['', '회차', '일자', '0', '1', '2', '3', '4', '5', '6', '합']);
+
+      // Data rows
+      for (let i = 0; i < rows.length; i++) {
+        const r = rows[i];
+        const rowIdx = i + 3; // 1-based Excel row (0-indexed wsData row + 1)
+        if (!r.hasData) {
+          // DB에 데이터 없는 회차
+          wsData.push([i + 1, r.round, '', '', '', '', '', '', '', '', '-']);
+        } else if (r.counts.length > 0) {
+          const row: any[] = [
+            i + 1,
+            r.round,
+            r.date,
+            r.counts[0] || '',
+            r.counts[1] || '',
+            r.counts[2] || '',
+            r.counts[3] || '',
+            r.counts[4] ? r.counts[4] : (r.counts[4] === 0 ? '-' : ''),
+            r.counts[5] ? r.counts[5] : (r.counts[5] === 0 ? '-' : ''),
+            r.counts[6] ? r.counts[6] : (r.counts[6] === 0 ? '-' : ''),
+            { f: `SUM(D${rowIdx}:J${rowIdx})` },
+          ];
+          wsData.push(row);
+        } else {
+          // 데이터는 있지만 비교할 이전 회차가 없는 경우
+          wsData.push([i + 1, r.round, r.date, '', '', '', '', '', '', '', '-']);
+        }
+      }
+
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+      // 열 너비
+      ws['!cols'] = [
+        { wch: 5 },  // 번호
+        { wch: 8 },  // 회차
+        { wch: 12 }, // 일자
+        { wch: 6 },  // 0
+        { wch: 6 },  // 1
+        { wch: 6 },  // 2
+        { wch: 6 },  // 3
+        { wch: 6 },  // 4
+        { wch: 6 },  // 5
+        { wch: 6 },  // 6
+        { wch: 6 },  // 합
+      ];
+
+      // 머지: 번호정리 (B1:C1), 100주... (D1:K1)
+      ws['!merges'] = [
+        { s: { r: 0, c: 1 }, e: { r: 0, c: 2 } },
+        { s: { r: 0, c: 3 }, e: { r: 0, c: 10 } },
+      ];
+
+      // 스타일 적용
+      const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+      for (let R = range.s.r; R <= range.e.r; R++) {
+        for (let C = range.s.c; C <= range.e.c; C++) {
+          const addr = XLSX.utils.encode_cell({ r: R, c: C });
+          if (!ws[addr]) ws[addr] = { v: '', t: 's' };
+
+          if (R === 0 && C >= 3) {
+            ws[addr].s = headerStyle;
+          } else if (R === 0) {
+            ws[addr].s = subHeaderStyle;
+          } else if (R === 1) {
+            ws[addr].s = subHeaderStyle;
+          } else if (C === 10) {
+            // 합 열 = 노란색
+            ws[addr].s = sumStyle;
+          } else {
+            ws[addr].s = cellStyle;
+          }
+        }
+      }
+
+      XLSX.utils.book_append_sheet(wb, ws, '번호정리');
+      XLSX.writeFile(wb, `로또_일치통계_전체.xlsx`);
+
+      setExcelProgress('');
+    } catch (err) {
+      setError('엑셀 다운로드에 실패했습니다.');
+      console.error(err);
+    } finally {
+      setExcelLoading(false);
+    }
+  };
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -243,6 +443,16 @@ export default function AnalyzePage() {
             >
               {loading ? '검증 중...' : isRoundMode ? '회차 선택 시 자동 검증됨' : '검증 시작'}
             </button>
+
+            {isRoundMode && (
+              <button
+                onClick={handleExcelDownload}
+                disabled={excelLoading}
+                className="w-full mt-3 px-6 py-3 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors font-bold disabled:bg-gray-400 disabled:cursor-not-allowed"
+              >
+                {excelLoading ? excelProgress || '처리 중...' : '전체 회차 일치통계 엑셀 다운로드'}
+              </button>
+            )}
 
             {error && (
               <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
