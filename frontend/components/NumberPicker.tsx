@@ -12,12 +12,16 @@ interface NumberPickerProps {
   selectedNumbers: LottoNumberType[];
   onChange: (numbers: LottoNumberType[]) => void;
   maxSelection?: number;
+  onRandom?: (numbers: LottoNumberType[]) => void;
+  onClear?: () => void;
 }
 
 export const NumberPicker: React.FC<NumberPickerProps> = ({
   selectedNumbers,
   onChange,
   maxSelection = 15,
+  onRandom,
+  onClear,
 }) => {
   const allNumbers = Array.from({ length: 45 }, (_, i) => i + 1);
 
@@ -32,12 +36,21 @@ export const NumberPicker: React.FC<NumberPickerProps> = ({
   };
 
   const handleClear = () => {
-    onChange([]);
+    if (onClear) {
+      onClear();
+    } else {
+      onChange([]);
+    }
   };
 
   const handleRandom = () => {
     const shuffled = [...allNumbers].sort(() => Math.random() - 0.5);
-    onChange(shuffled.slice(0, maxSelection).sort((a, b) => a - b));
+    const randomNumbers = shuffled.slice(0, maxSelection).sort((a, b) => a - b);
+    if (onRandom) {
+      onRandom(randomNumbers as LottoNumberType[]);
+    } else {
+      onChange(randomNumbers as LottoNumberType[]);
+    }
   };
 
   const ranges = [
