@@ -27,6 +27,7 @@ export default function AdminPage() {
   const [manualNumbers, setManualNumbers] = useState<string>('');
   const [manualBonus, setManualBonus] = useState<string>('');
 
+
   // 초기 로드 시 최신 회차 정보 가져오기
   useEffect(() => {
     const fetchLatestRound = async () => {

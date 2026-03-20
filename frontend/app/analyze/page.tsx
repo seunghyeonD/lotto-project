@@ -249,8 +249,8 @@ export default function AnalyzePage() {
         const r = rows[i];
         const rowIdx = i + 3; // 1-based Excel row (0-indexed wsData row + 1)
         if (!r.hasData) {
-          // DB에 데이터 없는 회차
-          wsData.push([i + 1, r.round, '', '', '', '', '', '', '', '', '-']);
+          // DB에 데이터 없는 회차 (날짜는 계산값 사용)
+          wsData.push([i + 1, r.round, r.date, '', '', '', '', '', '', '', '-']);
         } else if (r.counts.length > 0) {
           const row: any[] = [
             i + 1,

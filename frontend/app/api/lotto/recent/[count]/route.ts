@@ -9,9 +9,9 @@ export async function GET(
     const { count: countStr } = await params;
     const count = parseInt(countStr, 10);
 
-    if (isNaN(count) || count < 1 || count > 1000) {
+    if (isNaN(count) || count < 1 || count > 2000) {
       return NextResponse.json(
-        { error: 'count must be between 1 and 1000' },
+        { error: 'count must be between 1 and 2000' },
         { status: 400 },
       );
     }

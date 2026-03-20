@@ -46,14 +46,31 @@ export function toDrawRow(draw: LottoDrawResult): LottoDrawRow {
  */
 export async function getRecentDraws(count: number): Promise<LottoDrawResult[]> {
   const supabase = getSupabaseClient();
-  const { data, error } = await supabase
-    .from('lotto_draws')
-    .select('*')
-    .order('round', { ascending: false })
-    .limit(count);
 
-  if (error) throw new Error(`Supabase error: ${error.message}`);
-  return (data as LottoDrawRow[]).map(toDrawResult);
+  if (count <= 1000) {
+    const { data, error } = await supabase
+      .from('lotto_draws')
+      .select('*')
+      .order('round', { ascending: false })
+      .limit(count);
+
+    if (error) throw new Error(`Supabase error: ${error.message}`);
+    return (data as LottoDrawRow[]).map(toDrawResult);
+  }
+
+  // 1000개 초과 시: 최신 회차 기준 범위 조회
+  const { data: latest, error: latestErr } = await supabase
+    .from('lotto_draws')
+    .select('round')
+    .order('round', { ascending: false })
+    .limit(1)
+    .single();
+
+  if (latestErr) throw new Error(`Supabase error: ${latestErr.message}`);
+  const latestRound = latest.round;
+  const startRound = Math.max(1, latestRound - count + 1);
+
+  return getDrawsInRange(startRound, latestRound);
 }
 
 /**
@@ -61,15 +78,24 @@ export async function getRecentDraws(count: number): Promise<LottoDrawResult[]> 
  */
 export async function getDrawsInRange(start: number, end: number): Promise<LottoDrawResult[]> {
   const supabase = getSupabaseClient();
-  const { data, error } = await supabase
-    .from('lotto_draws')
-    .select('*')
-    .gte('round', start)
-    .lte('round', end)
-    .order('round', { ascending: true });
+  const allResults: LottoDrawRow[] = [];
+  const BATCH_SIZE = 1000;
 
-  if (error) throw new Error(`Supabase error: ${error.message}`);
-  return (data as LottoDrawRow[]).map(toDrawResult);
+  // Supabase 기본 1000행 제한 우회: 배치로 나눠서 가져오기
+  for (let from = start; from <= end; from += BATCH_SIZE) {
+    const to = Math.min(from + BATCH_SIZE - 1, end);
+    const { data, error } = await supabase
+      .from('lotto_draws')
+      .select('*')
+      .gte('round', from)
+      .lte('round', to)
+      .order('round', { ascending: true });
+
+    if (error) throw new Error(`Supabase error: ${error.message}`);
+    if (data) allResults.push(...(data as LottoDrawRow[]));
+  }
+
+  return allResults.map(toDrawResult);
 }
 
 /**
@@ -152,4 +178,20 @@ export async function getLatestStoredRound(): Promise<number> {
     throw new Error(`Supabase error: ${error.message}`);
   }
   return data.round;
+}
+
+/**
+ * 특정 범위 내 저장된 회차 목록 조회
+ */
+export async function getStoredRounds(startRound: number, endRound: number): Promise<number[]> {
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase
+    .from('lotto_draws')
+    .select('round')
+    .gte('round', startRound)
+    .lte('round', endRound)
+    .order('round', { ascending: true });
+
+  if (error) throw new Error(`Supabase error: ${error.message}`);
+  return (data || []).map(row => row.round);
 }

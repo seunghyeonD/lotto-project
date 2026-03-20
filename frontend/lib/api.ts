@@ -58,7 +58,7 @@ class LottoApiClient {
    * 전체 당첨번호 조회
    */
   async getAllDraws(): Promise<LottoDrawResult[]> {
-    return this.fetch<LottoDrawResult[]>('/api/lotto/recent/1000');
+    return this.fetch<LottoDrawResult[]>('/api/lotto/recent/2000');
   }
 
   /**
